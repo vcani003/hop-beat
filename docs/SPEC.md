@@ -1,0 +1,517 @@
+<!-- Converted from docs/hop-beat-spec-v1.docx. The .docx is the original;
+     this markdown exists so the spec is diffable and searchable. -->
+
+hop//beat
+
+Spatial Rhythm Game • Product + Technical Project Specification
+
+Draft for implementation planning with Claude • August 2026
+
+One-line conceptA browser-based spatial rhythm game where a normal webcam turns the player's body into the controller. Players hit screen-anchored targets on beat; pose landmarks determine input, a cached beatmap determines timing, and lightweight procedural graphics turn movement into a responsive visual performance.
+
+
+# 1. Why This Project Exists
+
+This is intentionally not a portfolio project built only to demonstrate a framework. The project begins with a real interest: rhythm games, music, movement, interactive visuals, and the question of whether an ordinary webcam can turn physical space into a playable controller. The software should exist because the interaction is interesting, not because a résumé needs another CRUD application.
+
+Primary personal goal: build something I genuinely want to experiment with and play.
+
+Portfolio goal: demonstrate frontend/system-design ability through a technically unusual, immediately demoable experience.
+
+Learning goal: explore computer vision, realtime rendering, music analysis, game timing, procedural graphics, and latency.
+
+Product goal: make the core experience accessible in a browser with consumer hardware: laptop + webcam.
+
+Long-term creative goal: allow songs to become playable experiences through generated, curated, or handmade maps.
+
+
+## Project Name + Origin
+
+Working title: hop//beat. The name keeps a subtle lineage with Bunny Hop Player, the project that helped restart the habit of building for curiosity and fun. “hop” connects to physical movement and that earlier project; “beat” describes the rhythm-game core; “//” gives the name a digital/creative-coding character.
+
+The path to this project matters: curiosity about Moderna’s mRNA cancer research led to questions about how biological instructions are engineered, which led to thinking about scientist-facing software and applied projects. That reframed the goal for personal work: build around genuine interests and questions, rather than inventing projects solely to demonstrate a framework. That chain of curiosity eventually became the idea for a webcam-controlled spatial rhythm game.
+
+
+# 2. Product Identity
+
+The closest familiar comparison is visually Just Dance-like and mechanically DDR-like, but it should not clone either. The player's body is represented by a lightweight procedural 2D figure or abstract motion visualization. Gameplay is based on hitting spatial targets at specific times rather than reproducing an entire fixed choreography.
+
+VISUAL IDEA                         GAMEPLAY IDEAcamera / body pose                   timestamped notes        ↓                                  ↓procedural player                    screen target        ↓                                  ↓movement trails / effects            body part enters zone        └──────────────┬───────────────────┘                       ↓                PERFECT / GOOD / MISS
+
+
+# 3. Core Design Decisions Already Made
+
+Browser-first. The primary product should run in a browser. A player should be able to open a URL, allow camera access, calibrate, and play.
+
+React + TypeScript + Vite. Use React for application UI and TypeScript for game/application logic. Vite is preferred over Next.js because this is a realtime client application, not an SSR/content problem.
+
+Pose estimation in the browser. Use MediaPipe Pose Landmarker as the initial body-tracking solution. Gameplay should consume pose landmarks directly rather than routing input through a separate visual tool.
+
+PixiJS for the initial renderer. Use GPU-accelerated 2D rendering for targets, notes, procedural body graphics, trails, and effects. Do not begin with a heavy 3D avatar.
+
+Procedural player representation. Generate the player visualization from pose coordinates using lines, circles, curves, ribbons, particles, etc. Avoid rigged 3D characters in the MVP.
+
+Screen-anchored targets. Targets belong to stable normalized screen coordinates. The player moves into them. This is simpler and feels more like a classic rhythm-game field.
+
+Precomputed beatmaps. Analyze a song before gameplay and cache derived timing/choreography metadata. Do not make live audio analysis a dependency of normal gameplay.
+
+YouTube can be a playback source, not an audio extraction source. Use the official visible YouTube embed/API where appropriate. Do not rip, isolate, download, or modify YouTube audio.
+
+TouchDesigner is optional. Do not make TouchDesigner foundational. It may later become an alternate renderer for installations, projection, or experimental visuals.
+
+Gameplay beats visuals. Latency, timing correctness, and input reliability have priority over graphical complexity.
+
+
+# 4. Proposed Technology Stack
+
+Layer
+
+Initial choice
+
+Responsibility
+
+App
+
+React + TypeScript + Vite
+
+Menus, song selection, calibration UI, settings, results, app state
+
+Rendering
+
+PixiJS 8 / WebGL
+
+Game canvas, notes, targets, procedural body, trails, particles
+
+Camera
+
+getUserMedia
+
+Webcam capture
+
+Pose
+
+MediaPipe Pose Landmarker
+
+Body landmark coordinates and confidence
+
+Game loop
+
+TypeScript + requestAnimationFrame
+
+Clock sampling, note lifecycle, collisions, scoring
+
+Playback
+
+YouTube IFrame API + local/dev audio adapters
+
+Playback and authoritative playback position
+
+Analysis
+
+@audio/beat initially
+
+Offline/pre-play BPM, beats, onsets from permitted audio samples
+
+Richer analysis
+
+Meyda later
+
+Energy/spectral features if choreography needs them
+
+Advanced analysis
+
+Essentia.js only if justified
+
+Deeper MIR/ML features; avoid until a concrete need exists
+
+Maps
+
+Versioned JSON
+
+Portable beatmap/choreography metadata
+
+Persistence
+
+Local files/localStorage initially
+
+No backend required for MVP
+
+Testing
+
+Vitest + React Testing Library
+
+Pure engine logic, UI, map validation
+
+Optional installation renderer
+
+TouchDesigner
+
+Projection/installation-scale visuals via event adapter
+
+
+# 5. System Architecture
+
+┌─────────────────────┐                         │   PLAYBACK SOURCE    │                         │ YouTube / local dev  │                         └──────────┬──────────┘                                    │ current playback time                                    ▼┌────────────┐    landmarks   ┌─────────────────────┐    events    ┌──────────────┐│   WEBCAM   │ ─────────────► │     GAME ENGINE     │ ──────────► │    PIXIJS    ││ MediaPipe  │                │ notes / hit windows │             │   RENDERER   │└────────────┘                │ scoring / collision │             └──────────────┘                              └──────────┬──────────┘                                         │                                         ▼                              ┌─────────────────────┐                              │      REACT UI       │                              │ score / combo / UI  │                              └─────────────────────┘Optional later:GAME EVENTS ─────────────► TouchDesigner adapter / installation renderer
+
+
+# 6. Coordinate and Input Model
+
+Normalize the camera/game field to coordinates from 0.0 to 1.0. This keeps gameplay independent of screen resolution. The webcam preview may be mirrored for natural interaction, but the coordinate transform must be explicit and tested.
+
+(0,0) ───────────────────────────── (1,0)  │       [UPPER LEFT] [UPPER RIGHT]    │  │                                     │  │                  PLAYER             │  │                                     │  │       [LOWER LEFT] [LOWER RIGHT]    │(0,1) ───────────────────────────── (1,1)
+
+MVP input should use wrists/hands only. A hit occurs when an eligible landmark enters the target region within the note's timing window. Later versions may add feet, knees, torso, ducking, leaning, swipes, holds, simultaneous hits, and movement velocity.
+
+
+# 7. Rhythm Timing Model
+
+The playback clock, not the renderer and not the pose-estimation frame rate, should be authoritative for note judgment. The game loop repeatedly samples playback time and compares it against note timestamps. Pose updates may arrive at a lower rate than rendering; visual interpolation can smooth motion without inventing gameplay timestamps.
+
+playbackTime = playbackAdapter.getCurrentTime()pose = latestPoseSnapshotfor each active note:    delta = playbackTime - note.time    if eligible body landmark enters note zone:        judge(abs(delta))Example starting windows (TUNABLE, not final):PERFECT  <= 80 msGOOD     <= 160 msMISS     > 160 ms
+
+Do not lock final timing windows until real-device testing. Webcam inference, display, browser scheduling, and playback source can all introduce offset. Build calibration as a first-class feature once basic gameplay works.
+
+
+# 8. Music Analysis and Beatmap Generation
+
+Normal gameplay should use a precomputed beatmap. The audio is analyzed once from a source the project is permitted to analyze. The derived metadata is then cached. The actual audio does not need to be stored with the map.
+
+PERMITTED ANALYSIS AUDIO        ↓decode to PCM samples        ↓@audio/beat        ↓BPM + beat timestamps + onset timestamps        ↓OUR CHOREOGRAPHY GENERATOR        ↓difficulty + target selection + ergonomic constraints        ↓beatmap JSON        ↓PLAYBACK SOURCE + CACHED MAP        ↓realtime game
+
+@audio/beat is the initial candidate because it operates on raw samples and exposes onset detection, tempo estimation, and beat tracking in browser or Node. Treat it as replaceable behind an analysis interface. The project's unique work is not reimplementing FFT/onset research; it is converting musical events into enjoyable physical choreography.
+
+
+# 9. Choreography Generator
+
+Beat detection answers 'when might something happen?' It does not answer 'what should the player do?' The choreography generator is a core project feature and should remain our code.
+
+Select a subset of detected beats/onsets based on difficulty.
+
+Choose a target zone and eligible limb.
+
+Avoid impossible or unpleasant rapid cross-screen transitions.
+
+Account for travel distance versus milliseconds available.
+
+Prefer readable patterns and intentional repetition over pure randomness.
+
+Use section/intensity information later to increase density or movement during energetic passages.
+
+Use a deterministic random seed when randomness is used, so regenerated maps are reproducible.
+
+
+# 10. Beatmap Data Model
+
+{  "schemaVersion": 1,  "song": {    "id": "artist-track-slug",    "title": "Track Name",    "artist": "Artist",    "playback": {      "provider": "youtube",      "videoId": "VIDEO_ID"    }  },  "analysis": {    "bpm": 128.1,    "confidence": 0.91,    "offsetMs": 0,    "generatorVersion": "0.1.0"  },  "difficulty": "normal",  "mapType": "generated",  "notes": [    {      "id": "n001",      "timeMs": 1842,      "type": "hit",      "zone": "upperLeft",      "limb": "eitherHand"    }  ]}
+
+Map types should eventually be: generated, curated (generated then edited), and handmade. Store only the information necessary to reproduce gameplay and attribution. Keep map schema versioned from the beginning.
+
+
+# 11. YouTube + Music Rights Strategy
+
+The project should not assume that being non-monetized makes copyrighted music free to use. Music rights and platform rules are separate from monetization. For public demos, prefer artists/tracks with explicit permission or licenses that cover the intended use.
+
+Do not bundle copyrighted DDR recordings or assume Hatsune Miku songs are generally free to use. Individual compositions/recordings have their own rights holders.
+
+Preferred artist workflow: artist supplies/authorizes an analysis-quality audio file, plus a YouTube URL used for public playback.
+
+Analyze the permitted source offline/pre-play; store the derived beatmap, not the source recording, unless the license explicitly permits distribution.
+
+For YouTube playback, keep the official player visible and functional and use the official IFrame API for playback state/current time.
+
+Do not download, isolate, separate, or modify YouTube audio/video through the API integration.
+
+Before public launch or monetization, perform a fresh policy/license review; platform policies can change.
+
+A potentially strong product angle is collaboration with indie artists: their official YouTube upload remains the playback experience while the game provides an additional interactive layer and credits the artist clearly. This is a product direction, not a blanket legal conclusion.
+
+
+# 12. Procedural Visual Direction
+
+The initial player representation should be generated mathematically from pose landmarks rather than using a rigged avatar. This reduces asset complexity and keeps rendering lightweight while creating room for a distinctive visual identity.
+
+Skeleton/line figure from shoulder-elbow-wrist, hip-knee-ankle connections.
+
+Circles or shapes at joints.
+
+Curves/ribbons following arms and movement.
+
+Short motion trails from wrists.
+
+Target pulse/ripple on successful hits.
+
+Theme system later: ink, neon wireframe, constellation, doodle, pixel-like, etc.
+
+Rendering style is deliberately not finalized. MVP visuals should be diagnostic first: landmarks, zones, and hit feedback must be easy to inspect.
+
+
+# 13. TouchDesigner Decision
+
+TouchDesigner is not required for the core browser game. It remains valuable as an optional experimental renderer if the project evolves toward projection mapping, performances, gallery installations, or event-scale visuals.
+
+Core gameplay must work without TouchDesigner.
+
+Expose renderer-agnostic GameEvents so another renderer can subscribe later.
+
+Possible future adapter: WebSocket/WebRTC/event bridge from game engine to TouchDesigner.
+
+If commercial use is considered, re-check current TouchDesigner licensing before using it in paid work.
+
+
+# 14. Performance and Latency Principles
+
+Pose inference and gameplay judgment come before decorative effects.
+
+Never require pose estimation to run at the same FPS as rendering.
+
+Keep the latest timestamped pose snapshot; interpolate only for visuals.
+
+Avoid React state updates on every animation frame. Keep hot game-loop state outside normal React render flow.
+
+Pool/reuse frequently created visual objects where practical.
+
+Provide graphics quality tiers if effects become expensive.
+
+Measure actual timing rather than optimizing based on guesses.
+
+Log pose inference duration, render FPS, playback drift, and hit delta during development.
+
+Pause judgment while YouTube is buffering/paused; do not let notes silently advance against a stopped player.
+
+
+# 15. MVP Roadmap
+
+
+## MVP 0 — Prove the Controller
+
+Goal: answer one question only: can a normal webcam reliably become the input device?
+
+Create Vite + React + TypeScript project.
+
+Request webcam permission and render mirrored preview.
+
+Integrate MediaPipe Pose Landmarker.
+
+Draw raw landmarks.
+
+Create four screen-anchored zones.
+
+Detect wrist entry/exit for each zone.
+
+Display a clear hit indicator and basic debug telemetry.
+
+No music. No scoring. No TouchDesigner. No polished art.
+
+MVP 0 exit criterionMove either wrist into each target and receive reliable, low-latency zone-enter events across repeated attempts.
+
+
+## MVP 1 — Make It a Rhythm Game
+
+Use one legally usable/local development track.
+
+Create one manually authored JSON beatmap first.
+
+Implement playback adapter and authoritative clock.
+
+Spawn/schedule notes against timestamps.
+
+Implement PERFECT / GOOD / MISS and combo/score.
+
+Create start, pause, calibration placeholder, play, and results states.
+
+Add simple PixiJS targets and procedural player visualization.
+
+MVP 1 exit criterionOne full song is playable from start to finish with understandable timing feedback and repeatable scoring.
+
+
+## MVP 2 — Generate a Map
+
+Build a separate analysis tool/path that accepts permitted audio.
+
+Decode audio to PCM and test @audio/beat BPM/onset/beat output.
+
+Persist raw analysis metadata for debugging.
+
+Build choreography generator v1.
+
+Generate Easy/Normal maps using density + travel-distance rules.
+
+Compare generated map against the handmade reference map.
+
+MVP 2 exit criterionA song can be analyzed once and produce a deterministic, reasonably playable generated chart without hand-entering every note.
+
+
+## MVP 3 — YouTube Playback
+
+Integrate official visible YouTube IFrame player.
+
+Create a YouTube PlaybackAdapter around player state and getCurrentTime().
+
+Bind a cached map to a specific video ID.
+
+Handle play/pause/buffering/seeking explicitly.
+
+Test drift and perceived timing over an entire song.
+
+Add per-device/user offset calibration if required.
+
+MVP 3 exit criterionA permitted artist's YouTube upload can drive a cached map with acceptable perceived synchronization while the official player remains visible and functional.
+
+
+## MVP 4 — Map Editor / Curation
+
+Timeline/waveform or event-lane editor.
+
+Move/add/delete notes.
+
+Change target/limb/type.
+
+Loop and replay a small section.
+
+Mark map as curated and retain generator provenance.
+
+Export/import versioned beatmap JSON.
+
+
+## MVP 5 — Visual / Installation Experiments
+
+Add richer procedural visual themes.
+
+Create renderer-independent event bus.
+
+Prototype optional TouchDesigner event adapter.
+
+Experiment with projection or large-screen mode.
+
+Only add 3D if the game concept actually benefits from depth.
+
+
+# 16. Recommended Repository Structure
+
+src/  app/    routes/    screens/  game/    engine/      GameClock.ts      GameEngine.ts      NoteJudge.ts      CollisionSystem.ts      ScoreSystem.ts    maps/      schema.ts      validator.ts    choreography/      generator.ts      ergonomics.ts  pose/    MediaPipePoseProvider.ts    poseTypes.ts    transforms.ts  playback/    PlaybackAdapter.ts    LocalAudioAdapter.ts    YouTubeAdapter.ts  render/    pixi/      GameRenderer.ts      ProceduralPlayer.ts      TargetRenderer.ts      Effects.ts  analysis/    AudioAnalyzer.ts    AudioBeatAnalyzer.ts  events/    GameEventBus.ts  ui/    components/  debug/    telemetry.tsmaps/  fixtures/  generated/tests/  engine/  choreography/  maps/
+
+
+# 17. Key Interfaces
+
+interface PlaybackAdapter {  play(): Promise<void> | void;  pause(): void;  getCurrentTimeMs(): number;  getState(): 'idle' | 'playing' | 'paused' | 'buffering' | 'ended';}interface PoseSnapshot {  timestampMs: number;  landmarks: Record<string, { x: number; y: number; visibility?: number }>;}interface GameEvent {  type: 'NOTE_HIT' | 'NOTE_MISS' | 'COMBO_CHANGED' | 'BEAT';  timestampMs: number;  payload?: unknown;}interface AudioAnalysis {  bpm: number;  confidence: number;  beatsMs: number[];  onsetsMs: number[];}
+
+
+# 18. Testing Strategy
+
+Unit-test timing judgment around exact window boundaries.
+
+Unit-test collision with mirrored/non-mirrored coordinates.
+
+Unit-test map schema validation and migrations.
+
+Unit-test choreography travel-distance constraints and deterministic seeding.
+
+Use fake PlaybackAdapter clocks for deterministic engine tests.
+
+Keep recorded pose-coordinate fixtures so collision/gameplay tests do not require a live webcam.
+
+Add a developer debug HUD for FPS, pose Hz, current song time, active note, hit delta, and confidence.
+
+Perform real-device manual tests on at least a laptop webcam and one external/alternate camera when available.
+
+
+# 19. Explicit Non-Goals for the First Build
+
+No multiplayer.
+
+No accounts/social graph.
+
+No backend unless a real requirement appears.
+
+No community map marketplace.
+
+No full-body choreography grading.
+
+No 3D avatar system.
+
+No AI-generated choreography requirement.
+
+No automatic YouTube audio extraction.
+
+No TouchDesigner dependency.
+
+No attempt to support every song before one song feels good.
+
+No premature mobile support; full-body camera framing on phones is a separate UX problem.
+
+
+# 20. Open Questions to Learn Through Prototyping
+
+Is MediaPipe wrist tracking responsive enough for satisfying rhythm judgment on typical laptops?
+
+What pose inference rate gives the best CPU/latency tradeoff?
+
+How large should screen zones be to feel intentional rather than frustrating?
+
+Should notes require zone entry, dwell, velocity, or directional crossing?
+
+How much YouTube timing jitter/drift is perceptible in this style of game?
+
+What calibration model is necessary: global offset, input offset, or both?
+
+Can @audio/beat produce useful candidates across the music styles we care about?
+
+What rules make auto-generated choreography feel musical rather than random?
+
+Does showing the webcam improve playability, or is an abstract procedural player enough?
+
+Which visual effects remain readable while the player is moving quickly?
+
+
+# 21. Instructions for Claude
+
+Treat this document as product/architecture intent, not permission to build every future feature. Work incrementally. The immediate assignment is MVP 0 only unless explicitly told to advance.
+
+Read the entire spec before proposing implementation.
+
+Start by writing a short MVP 0 implementation plan and identify any technical assumptions that must be validated.
+
+Preserve the architecture boundaries: pose provider, game engine, playback adapter, renderer, and React UI should not become one coupled component.
+
+Do not introduce a backend, Next.js, TouchDesigner, 3D engine, state-management framework, or additional heavy dependency without a demonstrated requirement.
+
+Prefer small pure TypeScript modules for coordinate transforms, collision, timing, and scoring so they are testable.
+
+Build debug visualization before aesthetic visualization.
+
+Do not silently advance to MVP 1. Stop when MVP 0 exit criteria are met and present results/limitations for review.
+
+When a library/API assumption is uncertain, verify current official documentation before coding around it.
+
+Keep a short decision log for changes to the decisions in this spec.
+
+
+# 22. Definition of Success
+
+The project succeeds even before it becomes a polished product if it demonstrates a convincing interaction: a person stands in front of a normal webcam, music plays, targets arrive on beat, their physical movement becomes input, and the screen responds immediately. The engineering should make that interaction feel reliable enough that the technology disappears and the player wants to try another song.
+
+
+# 23. Current Technical Reference Notes
+
+These references were checked while preparing this spec. Re-check them when implementing or before launch because APIs, licenses, and policies can change.
+
+YouTube IFrame Player API: https://developers.google.com/youtube/iframe_api_referenceOfficial API supports embedded playback controls/state and getCurrentTime().
+
+YouTube Developer Policies: https://developers.google.com/youtube/terms/developer-policiesDo not separate/isolate/modify audio or video components; preserve player functionality.
+
+YouTube Policy Guide: https://developers.google.com/youtube/terms/developer-policies-guideOfficial compliance examples for visible/standard player experience.
+
+MediaPipe Pose Landmarker: https://ai.google.dev/edge/mediapipePose tracking family; current docs expose 33 pose landmarks and live/video modes.
+
+PixiJS Renderers: https://pixijs.com/8.x/guides/components/renderersWebGL/WebGL2 renderer is the stable recommended production renderer in PixiJS 8 docs.
+
+@audio/beat: https://github.com/audiojs/beatOnset detection, tempo estimation, and beat tracking on raw samples; browser and Node support.
+
+Meyda: https://github.com/meyda/meydaJavaScript audio feature extraction; offline and Web Audio realtime support.
+
+Essentia.js: https://github.com/MTG/essentia.jsWebAssembly-backed music/audio analysis; powerful but heavier and currently AGPL-3.0 in the repository.
+
+TouchDesigner licensing: https://derivative.ca/UserGuide/TouchDesigner_ProductsNon-Commercial is free for non-paying use with limits; Commercial is required for paid work.
+
+End of specification
+

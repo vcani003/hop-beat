@@ -4,8 +4,15 @@ A browser-based spatial rhythm game where an ordinary webcam turns the
 player's body into the controller. Targets arrive on beat; pose landmarks
 decide input; a precomputed beatmap decides timing.
 
-**Nothing is built yet.** This repository currently holds the specification
-and the visual concept. See [`docs/SPEC.md`](docs/SPEC.md).
+**MVP 0 is built.** Webcam, pose landmarks, four zones and wrist-entry events,
+with a debug HUD. No music, no scoring, no art — by design.
+See [`docs/SPEC.md`](docs/SPEC.md) and [`docs/DECISIONS.md`](docs/DECISIONS.md).
+
+```bash
+npm install   # also vendors the MediaPipe runtime and pose models
+npm run dev
+npm test
+```
 
 ---
 
@@ -51,7 +58,8 @@ modified. See §11 of the spec.
 MVP 0 is the only assignment until it is met and reviewed.
 
 - **MVP 0 — prove the controller.** Webcam, pose landmarks, four zones, reliable
-  wrist-entry events. No music, no scoring, no art.
+  wrist-entry events. No music, no scoring, no art. *Built; awaiting real-webcam
+  sign-off against the exit criterion.*
 - **MVP 1 — make it a rhythm game.** One track, one hand-authored map,
   authoritative clock, judgment and scoring.
 - **MVP 2 — generate a map.** Offline analysis, then a choreography generator
@@ -63,11 +71,24 @@ MVP 0 is the only assignment until it is met and reviewed.
 ## Repository
 
 ```
+src/
+  pose/         camera, MediaPipe provider, coordinate transforms
+  game/         zone geometry and the zone-entry state machine
+  debug/        canvas renderer and telemetry
+  ui/           React panel and HUD
+tests/          pure-logic tests; no webcam required
+scripts/
+  fetch-assets.mjs        vendors the MediaPipe runtime and models
 docs/
   SPEC.md                 the specification, in markdown
+  DECISIONS.md            decisions taken beyond the spec
   hop-beat-spec-v1.docx   the original document
   concept-mockup.png      visual direction: light, dark and outline modes
 ```
+
+Everything under `game/` and the coordinate transforms are pure TypeScript with
+no DOM or MediaPipe imports, so the timing and collision logic is tested against
+synthetic pose data rather than a live camera.
 
 > The mockup is a **concept image**. It shows a commercial track and its album
 > art for illustration only — that is not a licensing decision, and §11 of the

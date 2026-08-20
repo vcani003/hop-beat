@@ -3,3 +3,7 @@ dist
 .DS_Store
 *.local
 *.tsbuildinfo
+
+# Vendored pose assets (~50 MB). Reproduce with: node scripts/fetch-assets.mjs
+public/mediapipe/
+public/models/

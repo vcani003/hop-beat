@@ -11,10 +11,8 @@ and the visual concept. See [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Where the name comes from
 
-`hop` carries a deliberate lineage from **Bunny Hop Player**, the project that
-restarted the habit of building for curiosity rather than for a résumé — and it
-describes the movement. `beat` is the rhythm-game core. `//` gives it the
-creative-coding character.
+`hop` is the movement, and a nod to **Bunny Hop Player**. `beat` is the
+rhythm-game core. `//` gives it the creative-coding character.
 
 ## The one thing this has to prove
 

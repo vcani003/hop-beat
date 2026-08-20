@@ -12,7 +12,7 @@ One-line conceptA browser-based spatial rhythm game where a normal webcam turns 
 
 # 1. Why This Project Exists
 
-This is intentionally not a portfolio project built only to demonstrate a framework. The project begins with a real interest: rhythm games, music, movement, interactive visuals, and the question of whether an ordinary webcam can turn physical space into a playable controller. The software should exist because the interaction is interesting, not because a résumé needs another CRUD application.
+The project begins with a real interest: rhythm games, music, movement, interactive visuals, and the question of whether an ordinary webcam can turn physical space into a playable controller. The software should exist because the interaction is interesting.
 
 Primary personal goal: build something I genuinely want to experiment with and play.
 
@@ -27,9 +27,9 @@ Long-term creative goal: allow songs to become playable experiences through gene
 
 ## Project Name + Origin
 
-Working title: hop//beat. The name keeps a subtle lineage with Bunny Hop Player, the project that helped restart the habit of building for curiosity and fun. “hop” connects to physical movement and that earlier project; “beat” describes the rhythm-game core; “//” gives the name a digital/creative-coding character.
+Working title: hop//beat. “hop” connects to physical movement, and to Bunny Hop Player; “beat” describes the rhythm-game core; “//” gives the name a digital/creative-coding character.
 
-The path to this project matters: curiosity about Moderna’s mRNA cancer research led to questions about how biological instructions are engineered, which led to thinking about scientist-facing software and applied projects. That reframed the goal for personal work: build around genuine interests and questions, rather than inventing projects solely to demonstrate a framework. That chain of curiosity eventually became the idea for a webcam-controlled spatial rhythm game.
+Where the idea came from: curiosity about Moderna’s mRNA cancer research led to questions about how biological instructions are engineered, which led to thinking about scientist-facing software and applied projects. That chain of curiosity became the idea for a webcam-controlled spatial rhythm game.
 
 
 # 2. Product Identity

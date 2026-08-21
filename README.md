@@ -90,6 +90,7 @@ docs/
   SPEC.md                 the specification, in markdown
   DECISIONS.md            decisions taken beyond the spec
   GESTURES.md             gesture design, planned before building
+  TRACKING.md             tracking capabilities: measured cost and latency
   hop-beat-spec-v1.docx   the original document
   concept-mockup.png      visual direction: light, dark and outline modes
 ```

@@ -28,6 +28,23 @@ const MODELS = ['lite', 'full'];
 const modelUrl = (v) =>
   `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${v}/float16/latest/pose_landmarker_${v}.task`;
 
+/**
+ * Hand and combined-tracking models, fetched only with --tracking-candidates.
+ *
+ * Not part of a normal install: another ~30 MB that nothing in the game loads
+ * yet. They exist so the benchmark in docs/TRACKING.md can be reproduced, and
+ * so a hands mode has them ready when one is built.
+ */
+const TRACKING_CANDIDATES = [
+  'hand_landmarker/hand_landmarker',
+  'gesture_recognizer/gesture_recognizer',
+  'holistic_landmarker/holistic_landmarker',
+];
+const candidateUrl = (path) => {
+  const name = path.split('/').pop();
+  return `https://storage.googleapis.com/mediapipe-models/${path}/float16/latest/${name}.task`;
+};
+
 const exists = (p) => stat(p).then(() => true, () => false);
 
 async function copyWasm() {
@@ -51,8 +68,28 @@ async function fetchModel(variant) {
   console.log(`  ${variant.padEnd(8)} downloaded (${(bytes.length / 1e6).toFixed(1)} MB)`);
 }
 
+async function fetchCandidate(path) {
+  const name = path.split('/').pop();
+  const dest = resolve(modelDir, `${name}.task`);
+  if (await exists(dest)) {
+    console.log(`  ${name.padEnd(20)} already present`);
+    return;
+  }
+  const res = await fetch(candidateUrl(path));
+  if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  await writeFile(dest, bytes);
+  console.log(`  ${name.padEnd(20)} downloaded (${(bytes.length / 1e6).toFixed(1)} MB)`);
+}
+
 await mkdir(modelDir, { recursive: true });
 console.log('hop//beat: vendoring pose assets');
 await copyWasm();
 for (const v of MODELS) await fetchModel(v);
+
+if (process.argv.includes('--tracking-candidates')) {
+  console.log('  tracking candidates (see docs/TRACKING.md)');
+  for (const path of TRACKING_CANDIDATES) await fetchCandidate(path);
+}
+
 console.log('done.');

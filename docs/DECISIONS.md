@@ -178,6 +178,12 @@ pushes inference past the frame budget. `lite` is the current default purely
 because it loads fastest; `full` costs nothing measurable if wrist accuracy in
 fast motion ever proves marginal.
 
+**Narrowed after MVP 1.** This holds *for pose alone*, and only because every
+option finishes with slack to spare. Add hand tracking and the slack is gone:
+pose + hand measures 15.5 ms on GPU and 36 ms on CPU against a 33 ms budget. So
+the moment a mode needs hands, the delegate stops being a shrug and becomes a
+requirement. See docs/TRACKING.md.
+
 ---
 
 ## MVP 0 exit criterion

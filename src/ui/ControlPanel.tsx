@@ -20,6 +20,8 @@ function Slider({
   max,
   step,
   display,
+  help,
+  warning,
   onChange,
 }: {
   label: string;
@@ -28,6 +30,10 @@ function Slider({
   max: number;
   step: number;
   display: string;
+  /** What this control actually does, in plain language. */
+  help?: React.ReactNode;
+  /** Shown when the current value is a known trap. */
+  warning?: React.ReactNode;
   onChange: (value: number) => void;
 }) {
   return (
@@ -44,6 +50,8 @@ function Slider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
       />
+      {help && <p className="field__help">{help}</p>}
+      {warning && <p className="field__help field__help--warn">{warning}</p>}
     </div>
   );
 }
@@ -110,6 +118,7 @@ export default function ControlPanel({ settings, onChange, disabled }: Props) {
           max={2}
           step={0.05}
           display={`${settings.zoneScale.toFixed(2)}×`}
+          help="How big the four targets are. Smaller asks for more precision; larger forgives sloppier aim."
           onChange={(v) => set('zoneScale', v)}
         />
         <p className="hint">
@@ -121,21 +130,38 @@ export default function ControlPanel({ settings, onChange, disabled }: Props) {
       <div className="panel__section">
         <h2 className="panel__heading">Detection</h2>
         <Slider
-          label="min visibility"
+          label="confidence needed"
           value={settings.minVisibility}
           min={0}
           max={0.95}
           step={0.05}
           display={settings.minVisibility.toFixed(2)}
+          help="How certain the model must be that it is really seeing your wrist before a hit counts. Raise it if phantom hits appear; lower it if real hits are ignored in dim light."
           onChange={(v) => set('minVisibility', v)}
         />
         <Slider
-          label="exit radius (hysteresis)"
+          label="exit radius — hysteresis"
           value={settings.exitRadiusScale}
           min={1}
           max={2}
           step={0.05}
           display={`${settings.exitRadiusScale.toFixed(2)}×`}
+          help={
+            <>
+              Each zone has two rings: an inner one you cross to <strong>enter</strong>,
+              and an outer one you must cross to <strong>leave</strong>. This sets how
+              much bigger the outer ring is. Judges by <strong>distance</strong>, so it
+              can tell a small wobble from a real second hit.
+            </>
+          }
+          warning={
+            settings.exitRadiusScale <= 1.02 ? (
+              <>
+                At 1.00× the two rings are the same ring — there is no gap, so a hand
+                resting near the edge will flicker in and out. Try 1.25×.
+              </>
+            ) : undefined
+          }
           onChange={(v) => set('exitRadiusScale', v)}
         />
         <Slider
@@ -145,15 +171,32 @@ export default function ControlPanel({ settings, onChange, disabled }: Props) {
           max={300}
           step={10}
           display={`${settings.exitGraceMs} ms`}
+          help="How long you must stay outside before leaving counts. Covers the model losing sight of your hand for a frame or two mid-motion."
           onChange={(v) => set('exitGraceMs', v)}
         />
         <Slider
-          label="refractory"
+          label="re-entry lockout — refractory"
           value={settings.refractoryMs}
           min={0}
           max={500}
           step={10}
           display={`${settings.refractoryMs} ms`}
+          help={
+            <>
+              After you leave a zone, how long it ignores you completely. Judges by{' '}
+              <strong>time</strong> — which means it cannot tell a wobble from a
+              deliberate fast repeat, and blocks both.
+            </>
+          }
+          warning={
+            settings.refractoryMs >= 200 ? (
+              <>
+                {settings.refractoryMs} ms blocks any repeat hit faster than{' '}
+                {(60000 / settings.refractoryMs).toFixed(0)} BPM. Use hysteresis for
+                chatter instead, and keep this near 0.
+              </>
+            ) : undefined
+          }
           onChange={(v) => set('refractoryMs', v)}
         />
         <Toggle
@@ -162,8 +205,8 @@ export default function ControlPanel({ settings, onChange, disabled }: Props) {
           onChange={(v) => set('requireInFrame', v)}
         />
         <p className="hint">
-          Set hysteresis to 1.00× and grace to 0 ms to see the raw chatter these two
-          settings exist to suppress.
+          Refused hits show in red in the event log, at the moment they would have
+          counted — so a setting that is eating your hits says so.
         </p>
       </div>
 

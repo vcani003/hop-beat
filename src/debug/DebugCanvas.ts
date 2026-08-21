@@ -72,14 +72,28 @@ function drawZones(ctx: CanvasRenderingContext2D, state: SceneState): void {
     const r = zone.radius * width;
     const held = INPUT_LIMBS.some((limb) => state.activePairs.has(`${zone.id}:${limb}`));
 
-    // Hysteresis band: the wrist must reach this outer ring before the tracker
-    // will accept that it has left.
+    // The hysteresis band, drawn as a shaded ring between the enter radius and
+    // the exit radius. This is the buffer a wrist must cross to count as having
+    // LEFT. Shading it rather than labelling it means the setting explains
+    // itself: at 1.00x the band visibly disappears, which is exactly the
+    // configuration in which a hand resting on the edge flickers.
+    const exitR = r * state.exitRadiusScale;
+    if (exitR > r + 0.5) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, exitR, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r, 0, Math.PI * 2, true); // reverse winding cuts the hole
+      ctx.fillStyle = held ? `${zone.colour}22` : 'rgba(255,255,255,0.05)';
+      ctx.fill();
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.setLineDash([4, 6]);
     ctx.strokeStyle = 'rgba(255,255,255,0.22)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(cx, cy, r * state.exitRadiusScale, 0, Math.PI * 2);
+    ctx.arc(cx, cy, exitR, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
@@ -99,7 +113,24 @@ function drawZones(ctx: CanvasRenderingContext2D, state: SceneState): void {
     ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.fillStyle = held ? zone.colour : 'rgba(255,255,255,0.55)';
     ctx.textAlign = 'center';
-    ctx.fillText(zone.label, cx, cy + r + 18);
+    ctx.fillText(zone.label, cx, cy + exitR + 18);
+
+    if (zone.id === state.zones[0]?.id) {
+      ctx.font = '9px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.fillText('cross to enter', cx, cy - r + 12);
+
+      // Whether a gap EXISTS is a property of the setting, not of how many
+      // pixels it happens to occupy — a small zone must not be mislabelled as
+      // having no hysteresis just because its band is thin on screen.
+      if (state.exitRadiusScale > 1.02) {
+        // Only draw the second label when there is room for it to be legible.
+        if (exitR - r > 11) ctx.fillText('cross to leave', cx, cy - exitR + 11);
+      } else {
+        ctx.fillStyle = 'rgba(248,113,113,0.9)';
+        ctx.fillText('no gap — will chatter', cx, cy - exitR - 6);
+      }
+    }
 
     if (held) {
       const limbs = INPUT_LIMBS.filter((l) => state.activePairs.has(`${zone.id}:${l}`))

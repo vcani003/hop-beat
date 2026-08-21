@@ -174,6 +174,21 @@ body {
 }
 .field__value { color: var(--text); font-weight: 600; }
 
+.field__help {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 5px 0 0;
+}
+.field__help strong { color: var(--text); font-weight: 600; }
+
+.field__help--warn {
+  color: var(--gold);
+  border-left: 2px solid var(--gold);
+  padding-left: 7px;
+}
+.field__help--warn strong { color: var(--gold); }
+
 input[type='range'] { width: 100%; accent-color: var(--violet); }
 
 select, button {

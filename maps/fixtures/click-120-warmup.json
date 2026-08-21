@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "layoutId": "corners4",
   "song": {
     "id": "hopbeat-click-120-warmup",
     "title": "Warm-up (120 BPM click)",
@@ -17,7 +18,7 @@
     "offsetMs": 0,
     "generatorVersion": "handmade"
   },
-  "difficulty": "normal",
+  "difficulty": "easy",
   "mapType": "handmade",
   "notes": [
     {
@@ -29,373 +30,163 @@
     },
     {
       "id": "n002",
-      "timeMs": 4500,
+      "timeMs": 5000,
       "type": "hit",
-      "zone": "upperRight",
+      "zone": "upperLeft",
       "limb": "eitherHand"
     },
     {
       "id": "n003",
-      "timeMs": 5000,
+      "timeMs": 6000,
       "type": "hit",
-      "zone": "lowerRight",
+      "zone": "upperRight",
       "limb": "eitherHand"
     },
     {
       "id": "n004",
-      "timeMs": 5500,
+      "timeMs": 7000,
       "type": "hit",
-      "zone": "lowerLeft",
+      "zone": "upperRight",
       "limb": "eitherHand"
     },
     {
       "id": "n005",
-      "timeMs": 6000,
-      "type": "hit",
-      "zone": "upperLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n006",
-      "timeMs": 6500,
-      "type": "hit",
-      "zone": "upperRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n007",
-      "timeMs": 7000,
-      "type": "hit",
-      "zone": "lowerRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n008",
-      "timeMs": 7500,
+      "timeMs": 8000,
       "type": "hit",
       "zone": "lowerLeft",
       "limb": "eitherHand"
     },
     {
-      "id": "n009",
-      "timeMs": 8000,
-      "type": "hit",
-      "zone": "upperLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n010",
-      "timeMs": 8500,
-      "type": "hit",
-      "zone": "upperLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n011",
+      "id": "n006",
       "timeMs": 9000,
       "type": "hit",
-      "zone": "upperRight",
+      "zone": "lowerLeft",
       "limb": "eitherHand"
     },
     {
-      "id": "n012",
-      "timeMs": 9500,
-      "type": "hit",
-      "zone": "upperRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n013",
+      "id": "n007",
       "timeMs": 10000,
       "type": "hit",
       "zone": "lowerRight",
       "limb": "eitherHand"
     },
     {
-      "id": "n014",
-      "timeMs": 10500,
+      "id": "n008",
+      "timeMs": 11000,
       "type": "hit",
       "zone": "lowerRight",
       "limb": "eitherHand"
     },
     {
-      "id": "n015",
-      "timeMs": 11000,
-      "type": "hit",
-      "zone": "lowerLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n016",
-      "timeMs": 11500,
-      "type": "hit",
-      "zone": "lowerLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n017",
+      "id": "n009",
       "timeMs": 12000,
       "type": "hit",
       "zone": "upperLeft",
       "limb": "eitherHand"
     },
     {
-      "id": "n018",
-      "timeMs": 12250,
-      "type": "hit",
-      "zone": "upperRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n019",
-      "timeMs": 12500,
-      "type": "hit",
-      "zone": "upperLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n020",
-      "timeMs": 12750,
-      "type": "hit",
-      "zone": "upperRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n021",
+      "id": "n010",
       "timeMs": 13000,
       "type": "hit",
-      "zone": "upperLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n022",
-      "timeMs": 13250,
-      "type": "hit",
       "zone": "upperRight",
       "limb": "eitherHand"
     },
     {
-      "id": "n023",
-      "timeMs": 13500,
-      "type": "hit",
-      "zone": "upperLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n024",
-      "timeMs": 13750,
-      "type": "hit",
-      "zone": "upperRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n025",
+      "id": "n011",
       "timeMs": 14000,
       "type": "hit",
-      "zone": "lowerLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n026",
-      "timeMs": 14250,
-      "type": "hit",
       "zone": "lowerRight",
       "limb": "eitherHand"
     },
     {
-      "id": "n027",
-      "timeMs": 14500,
-      "type": "hit",
-      "zone": "lowerLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n028",
-      "timeMs": 14750,
-      "type": "hit",
-      "zone": "lowerRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n029",
+      "id": "n012",
       "timeMs": 15000,
       "type": "hit",
       "zone": "lowerLeft",
       "limb": "eitherHand"
     },
     {
-      "id": "n030",
-      "timeMs": 15250,
-      "type": "hit",
-      "zone": "lowerRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n031",
-      "timeMs": 15500,
-      "type": "hit",
-      "zone": "lowerLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n032",
-      "timeMs": 15750,
-      "type": "hit",
-      "zone": "lowerRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n033",
+      "id": "n013",
       "timeMs": 16000,
       "type": "hit",
       "zone": "upperLeft",
       "limb": "eitherHand"
     },
     {
-      "id": "n034",
-      "timeMs": 16500,
-      "type": "hit",
-      "zone": "lowerRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n035",
+      "id": "n014",
       "timeMs": 17000,
       "type": "hit",
-      "zone": "upperRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n036",
-      "timeMs": 17500,
-      "type": "hit",
-      "zone": "lowerLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n037",
-      "timeMs": 18000,
-      "type": "hit",
-      "zone": "upperLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n038",
-      "timeMs": 18500,
-      "type": "hit",
       "zone": "lowerRight",
       "limb": "eitherHand"
     },
     {
-      "id": "n039",
-      "timeMs": 19000,
+      "id": "n015",
+      "timeMs": 18000,
       "type": "hit",
       "zone": "upperRight",
       "limb": "eitherHand"
     },
     {
-      "id": "n040",
-      "timeMs": 19500,
+      "id": "n016",
+      "timeMs": 19000,
       "type": "hit",
       "zone": "lowerLeft",
       "limb": "eitherHand"
     },
     {
-      "id": "n041",
+      "id": "n017",
       "timeMs": 20000,
       "type": "hit",
       "zone": "upperLeft",
-      "limb": "leftHand"
+      "limb": "eitherHand"
     },
     {
-      "id": "n042",
+      "id": "n018",
       "timeMs": 20500,
       "type": "hit",
       "zone": "upperRight",
-      "limb": "rightHand"
+      "limb": "eitherHand"
     },
     {
-      "id": "n043",
+      "id": "n019",
       "timeMs": 21000,
       "type": "hit",
-      "zone": "upperLeft",
-      "limb": "leftHand"
+      "zone": "lowerLeft",
+      "limb": "eitherHand"
     },
     {
-      "id": "n044",
+      "id": "n020",
       "timeMs": 21500,
       "type": "hit",
-      "zone": "upperRight",
-      "limb": "rightHand"
+      "zone": "lowerRight",
+      "limb": "eitherHand"
     },
     {
-      "id": "n045",
+      "id": "n021",
       "timeMs": 22000,
       "type": "hit",
-      "zone": "lowerLeft",
-      "limb": "leftHand"
+      "zone": "upperLeft",
+      "limb": "eitherHand"
     },
     {
-      "id": "n046",
+      "id": "n022",
       "timeMs": 22500,
       "type": "hit",
-      "zone": "lowerRight",
-      "limb": "rightHand"
+      "zone": "upperRight",
+      "limb": "eitherHand"
     },
     {
-      "id": "n047",
+      "id": "n023",
       "timeMs": 23000,
       "type": "hit",
       "zone": "lowerLeft",
-      "limb": "leftHand"
+      "limb": "eitherHand"
     },
     {
-      "id": "n048",
+      "id": "n024",
       "timeMs": 23500,
       "type": "hit",
       "zone": "lowerRight",
-      "limb": "rightHand"
-    },
-    {
-      "id": "n049",
-      "timeMs": 24000,
-      "type": "hit",
-      "zone": "upperLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n050",
-      "timeMs": 24500,
-      "type": "hit",
-      "zone": "upperRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n051",
-      "timeMs": 25000,
-      "type": "hit",
-      "zone": "lowerRight",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n052",
-      "timeMs": 25500,
-      "type": "hit",
-      "zone": "lowerLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n053",
-      "timeMs": 26000,
-      "type": "hit",
-      "zone": "upperLeft",
-      "limb": "eitherHand"
-    },
-    {
-      "id": "n054",
-      "timeMs": 26000,
-      "type": "hit",
-      "zone": "upperRight",
       "limb": "eitherHand"
     }
   ]

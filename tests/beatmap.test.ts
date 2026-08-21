@@ -136,16 +136,31 @@ describe('the shipped warm-up chart', () => {
     expect(zones.size).toBe(4);
   });
 
-  /** Section C is deliberately at eighth notes — the repeat-hit stress test. */
-  it('contains repeats fast enough to exercise the tracker', () => {
+  /**
+   * A warm-up teaches; it does not test. Reported after playing: "it seems
+   * many beats happen at once across different hit zones and it is hard to
+   * tell which one to hit... rapid fire hits should not be done first round."
+   */
+  it('never asks for two targets at the same moment', () => {
+    const times = (warmup as Beatmap).notes.map((n) => n.timeMs);
+    expect(new Set(times).size).toBe(times.length);
+  });
+
+  it('never goes faster than one note per beat', () => {
     const notes = (warmup as Beatmap).notes;
-    let fastest = Infinity;
-    const lastByZone = new Map<string, number>();
-    for (const n of notes) {
-      const previous = lastByZone.get(n.zone);
-      if (previous !== undefined) fastest = Math.min(fastest, n.timeMs - previous);
-      lastByZone.set(n.zone, n.timeMs);
+    const beatMs = 60_000 / (warmup as Beatmap).analysis.bpm;
+    for (let i = 1; i < notes.length; i++) {
+      expect(notes[i].timeMs - notes[i - 1].timeMs, `note ${i}`).toBeGreaterThanOrEqual(beatMs - 1);
     }
-    expect(fastest).toBeLessThanOrEqual(500);
+  });
+
+  it('never asks for a specific hand', () => {
+    expect((warmup as Beatmap).notes.every((n) => n.limb === 'eitherHand')).toBe(true);
+  });
+
+  it('introduces each corner before asking the player to move between them', () => {
+    const notes = (warmup as Beatmap).notes;
+    // The opening should stay put: the first four notes use only two zones.
+    expect(new Set(notes.slice(0, 4).map((n) => n.zone)).size).toBeLessThanOrEqual(2);
   });
 });

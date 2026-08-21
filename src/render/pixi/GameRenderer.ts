@@ -49,6 +49,11 @@ interface Ripple {
   colour: number;
 }
 
+interface StrikeMark {
+  graphic: Graphics;
+  bornAt: number;
+}
+
 export interface RenderState {
   zones: readonly Zone[];
   /**
@@ -66,6 +71,7 @@ export interface RenderState {
 }
 
 const RIPPLE_MS = 500;
+const STRIKE_MS = 260;
 const POPUP_MS = 700;
 const TRAIL_LENGTH = 12;
 
@@ -81,6 +87,7 @@ export class GameRenderer {
   private playerGraphics = new Graphics();
 
   private ripples: Ripple[] = [];
+  private strikes: StrikeMark[] = [];
   private popups: Popup[] = [];
   /** Recent wrist positions in field space, for motion trails. */
   private trails: Record<string, Array<{ x: number; y: number }>> = {
@@ -284,9 +291,9 @@ export class GameRenderer {
     if (!this.app || !zone) return;
     const graphic = new Graphics();
     graphic.position.set(zone.cx * this.width, zone.cy * this.height);
-    (graphic as Graphics & { baseRadius?: number }).baseRadius = this.radiusPx(zone) * 0.6;
+    (graphic as Graphics & { baseRadius?: number }).baseRadius = this.radiusPx(zone);
     this.effectLayer.addChild(graphic);
-    this.ripples.push({ graphic, bornAt: nowMs, colour: 0xffffff });
+    this.strikes.push({ graphic, bornAt: nowMs });
   }
 
   /** Fire the feedback for one judgment. Called from the engine's output. */
@@ -342,6 +349,28 @@ export class GameRenderer {
       return true;
     });
 
+    // Strikes that scored nothing get a small INWARD flash at the centre.
+    //
+    // Deliberately a different kind of motion from everything else on screen:
+    // approach rings travel inward from outside, hit ripples travel outward.
+    // An extra expanding ring competed with both — "the white ripple is also
+    // confusing when circles going inward on the target are coming." A small
+    // contained dot at the centre reads as acknowledgement without joining the
+    // traffic.
+    this.strikes = this.strikes.filter((strike) => {
+      const age = (nowMs - strike.bornAt) / STRIKE_MS;
+      if (age >= 1) {
+        strike.graphic.destroy();
+        return false;
+      }
+      const base = (strike.graphic as Graphics & { baseRadius?: number }).baseRadius ?? 30;
+      strike.graphic.clear();
+      strike.graphic
+        .circle(0, 0, base * 0.32 * (1 - age * 0.4))
+        .fill({ color: 0xffffff, alpha: 0.35 * (1 - age) });
+      return true;
+    });
+
     this.popups = this.popups.filter((popup) => {
       const age = (nowMs - popup.bornAt) / POPUP_MS;
       if (age >= 1) {
@@ -355,6 +384,8 @@ export class GameRenderer {
   }
 
   clearEffects(): void {
+    for (const strike of this.strikes) strike.graphic.destroy();
+    this.strikes = [];
     for (const ripple of this.ripples) ripple.graphic.destroy();
     for (const popup of this.popups) popup.text.destroy();
     this.ripples = [];

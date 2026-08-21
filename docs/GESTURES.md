@@ -143,3 +143,65 @@ average over. Jitter is a much smaller problem for holds than for tracking.
   candidate, and it has the same "changes nothing structural" property.
 - Is pausing right, or should the overlay be usable between songs only? Pausing
   mid-song is more useful and more likely to be triggered by accident.
+
+---
+
+# Appendix: the diagnostics flow
+
+Added after a play session where the only available report was "this missed".
+
+## The problem
+
+"It missed" cannot be investigated. It does not distinguish between:
+
+1. the camera never saw the hand
+2. the hand was seen but never reached the target
+3. a strike fired but landed outside the note's window
+4. a strike fired and was refused by a setting
+
+Four faults, four different fixes, and no way to tell from the sentence.
+
+Worse, a player cannot supply a timestamp. By the time something feels wrong,
+the moment has passed and the song has moved on.
+
+## What is recorded
+
+Every run, always on, in `PlayRecorder`:
+
+- **every note** and what became of it — hit, missed, and by how much
+- **every strike**, matched or not, with whether it was found by sweeping
+- **the hand track**, downsampled to ~10 Hz, both wrists with confidence
+- **the settings and the machine** — zone size, offset, pose rate, latency
+
+## Marks — the part that makes it usable
+
+Pressing **M** during play stamps the current playback time.
+
+That is the whole trick. A player cannot report a timestamp, but they can press
+a key the instant something feels wrong, which turns "somewhere in the song"
+into a point to look at. The exported file gathers a two-second window around
+each mark — notes due, strikes fired, and where the hands were — so the
+interesting part can be read without scrolling the whole recording.
+
+## Reading one
+
+`Download play log` writes `hopbeat-play-<timestamp>.json` to the browser's
+download folder. It is meant to be read by whoever is debugging, and the
+questions it answers directly:
+
+| Symptom in the log | Fault |
+|---|---|
+| No track points near the mark | The camera lost the hand — lighting, framing, or confidence gate |
+| Track passes over the target, no strike | Detection: sweep gap, visibility gate, or zone too small |
+| Strike with `noteId: null` near a note | Timing — check `deltaMs` on nearby strikes |
+| Strikes with steady non-zero `deltaMs` | Offset. The slider fixes it |
+| `deltaMs` growing through the file | Tempo. The BPM is wrong; no slider fixes it |
+| `swept: true` on most strikes | Hands are moving faster than the pose rate; expect edge cases |
+
+## Not yet done
+
+- Replaying a recording through the engine offline, so a fix can be tested
+  against the exact movement that broke it without needing to reproduce it in
+  front of a camera. The engine is already pure and clock-free, so this is
+  mostly plumbing — and it is the natural next step.
+- A visual timeline of a run rather than JSON.

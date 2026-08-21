@@ -36,6 +36,7 @@ import { ClickTrackAdapter } from '../playback/ClickTrackAdapter.ts';
 import { LocalAudioAdapter } from '../playback/LocalAudioAdapter.ts';
 import type { PlaybackAdapter } from '../playback/PlaybackAdapter.ts';
 import { GameRenderer } from '../render/pixi/GameRenderer.ts';
+import { PlayRecorder } from '../debug/PlayRecorder.ts';
 import { scaledZones, usePosePipeline } from '../pose/usePosePipeline.ts';
 import { checkHandPosition, checkPosition, type PositionCheck } from '../game/positioning.ts';
 import { findMode, GAME_MODES, requiresHands } from '../game/modes.ts';
@@ -45,6 +46,7 @@ import { loadSettings, saveSettings } from './settingsStorage.ts';
 import { navigate } from './useHashRoute.ts';
 import type { Settings } from './types.ts';
 import type { ZoneEvent } from '../game/ZoneTracker.ts';
+import type { PoseSnapshot } from '../pose/poseTypes.ts';
 
 /**
  * Setup happens once, then songs are played from a menu that never
@@ -126,6 +128,8 @@ export default function PlayScreen() {
    */
   const [sizeFlash, setSizeFlash] = useState<string | null>(null);
   const sizeFlashTimer = useRef<number | null>(null);
+  // The key handler is installed once; markMoment is defined further down.
+  const markMomentRef = useRef<() => void>(() => {});
 
   const flashSize = useCallback((scale: number) => {
     setSizeFlash(`${scale.toFixed(2)}×`);
@@ -173,6 +177,8 @@ export default function PlayScreen() {
   const clockRef = useRef<GameClock | null>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const rafRef = useRef<number | null>(null);
+  const recorderRef = useRef(new PlayRecorder());
+  const [markCount, setMarkCount] = useState(0);
   const phaseRef = useRef<Phase>('menu');
   const lastJudgmentRef = useRef<string | null>(null);
 
@@ -200,7 +206,10 @@ export default function PlayScreen() {
 
   /** The pose pipeline calls this on every frame it produces. */
   const onPoseFrame = useCallback(
-    (events: readonly ZoneEvent[]) => {
+    (events: readonly ZoneEvent[], frame: { snapshot: PoseSnapshot }) => {
+      if (phaseRef.current === 'playing' && clockRef.current) {
+        recorderRef.current.sampleTrack(frame.snapshot, clockRef.current.rawTimeMs());
+      }
       if (phaseRef.current === 'calibrating') {
         for (const event of events) {
           if (event.type === 'ZONE_ENTER') touchedRef.current.add(event.zoneId);
@@ -211,6 +220,11 @@ export default function PlayScreen() {
 
       const judgments = engine.handleZoneEvents(events);
       presentJudgments(judgments);
+      recorderRef.current.recordStrikes(
+        events,
+        judgments,
+        clockRef.current?.rawTimeMs() ?? 0,
+      );
 
       // Acknowledge strikes that matched no note. Silence would be
       // indistinguishable from the camera not having seen the hand at all.
@@ -361,6 +375,8 @@ export default function PlayScreen() {
       return;
     }
 
+    recorderRef.current.reset();
+    setMarkCount(0);
     adapterRef.current = adapter;
     const clock = new GameClock(adapter, { offsetMs: settings.audioOffsetMs });
     clockRef.current = clock;
@@ -397,6 +413,12 @@ export default function PlayScreen() {
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
 
+      if (event.key === 'm' || event.key === 'M') {
+        event.preventDefault();
+        markMomentRef.current();
+        return;
+      }
+
       const next = zoneScaleForKey(event.key, settingsRef.current.zoneScale);
       if (next === null) return;
       event.preventDefault();
@@ -406,6 +428,51 @@ export default function PlayScreen() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [flashSize]);
+
+  /**
+   * Mark the moment something felt wrong.
+   *
+   * A player cannot report a timestamp, but they can hit a key the instant
+   * something feels off — which turns "somewhere in the song" into a point to
+   * look at. This is the single most useful thing in the recording.
+   */
+  const markMoment = useCallback(() => {
+    const clock = clockRef.current;
+    if (!clock || phaseRef.current !== 'playing') return;
+    recorderRef.current.mark(clock.rawTimeMs());
+    setMarkCount(recorderRef.current.markCount());
+    flashSize(-1); // reuse the readout slot
+    setSizeFlash(`marked ${(clock.rawTimeMs() / 1000).toFixed(1)}s`);
+  }, [flashSize]);
+
+  useEffect(() => {
+    markMomentRef.current = markMoment;
+  }, [markMoment]);
+
+  const downloadLog = useCallback(() => {
+    const document_ = recorderRef.current.build(map, {
+      recordedAtIso: new Date().toISOString(),
+      mode: mode.id,
+      difficulty: map.difficulty,
+      zoneScale: settings.zoneScale,
+      audioOffsetMs: settings.audioOffsetMs,
+      minVisibility: settings.minVisibility,
+      exitRadiusScale: settings.exitRadiusScale,
+      poseHz: pose.telemetry.poseHz,
+      inferenceMeanMs: pose.telemetry.inferenceMeanMs,
+      inputLatencyMs: pose.telemetry.latencyMeanMs,
+      frameClockSource: pose.telemetry.frameClockSource,
+      timestampSuspectRatio: pose.telemetry.suspectRatio,
+      userAgent: navigator.userAgent,
+    });
+    const blob = new Blob([JSON.stringify(document_, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = window.document.createElement('a');
+    anchor.href = url;
+    anchor.download = `hopbeat-play-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [map, mode, settings, pose.telemetry]);
 
   /** Open the positioning step. The targets do not change; the advice does. */
   const startPositioning = useCallback(() => {
@@ -823,6 +890,9 @@ export default function PlayScreen() {
               })()}
 
               <button className="button--primary" onClick={retry}>Play again</button>
+              <button onClick={downloadLog}>
+                Download play log{markCount > 0 ? ` (${markCount} marked)` : ''}
+              </button>
               <button onClick={quit}>Menu</button>
             </div>
           </div>
@@ -912,6 +982,27 @@ export default function PlayScreen() {
           <strong>Bias</strong> is which way you are off, and the offset slider cancels
           it. <strong>Spread</strong> is how tight you are — a large spread with a small
           bias means the windows are hard, not miscalibrated.
+        </p>
+
+        <h2 className="panel__heading" style={{ marginTop: 18 }}>Diagnostics</h2>
+        <div className="row">
+          <span className="row__label">moments marked</span>
+          <span className="row__value mono">{markCount}</span>
+        </div>
+        <button
+          style={{ marginTop: 8 }}
+          disabled={phase !== 'playing'}
+          onClick={markMoment}
+        >
+          Mark this moment <kbd>M</kbd>
+        </button>
+        <button style={{ marginTop: 6 }} onClick={downloadLog}>
+          Download play log
+        </button>
+        <p className="hint" style={{ marginTop: 8 }}>
+          Press <kbd>M</kbd> the instant something feels wrong. The log keeps a two-second
+          window around each mark — where your hands were, what fired, and what the note
+          was doing — which is what makes a miss diagnosable instead of anecdotal.
         </p>
 
         <h2 className="panel__heading" style={{ marginTop: 18 }}>Targets</h2>

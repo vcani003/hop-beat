@@ -10,3 +10,6 @@ public/models/
 
 # Audio the player supplies. Spec §11: store derived beatmaps, not recordings.
 public/audio/
+
+# Scratch fixtures used while verifying the pose pipeline.
+public/__test-*

@@ -46,6 +46,7 @@ const OFF_CENTRE_TOLERANCE = 0.07;
 
 export type PositionProblem =
   | 'noPose'
+  | 'noHands'
   | 'tooFar'
   | 'tooClose'
   | 'offCentreLeft'
@@ -85,6 +86,49 @@ const NO_POSE: PositionCheck = {
  * @param aspect width / height of the play field, so vertical distances are
  *   compared in the same units as horizontal ones.
  */
+/**
+ * Positioning for a mode that tracks hands and nothing else.
+ *
+ * The shoulder-based check below cannot run here: a hands-only backend reports
+ * no torso at all, so it would report "no pose" forever and leave the player
+ * unable to confirm anything. That was a real bug, and the fix is not a second
+ * geometry estimate — it is to stop estimating.
+ *
+ * Reachability is DEMONSTRATED instead, by touching each target. That is
+ * strictly better evidence than any calculation from body proportions, because
+ * it is the actual thing we wanted to know.
+ */
+export function checkHandPosition(
+  snapshot: PoseSnapshot | null,
+  zones: readonly Zone[],
+  touched: ReadonlySet<string>,
+): PositionCheck {
+  const left = snapshot?.landmarks.leftWrist;
+  const right = snapshot?.landmarks.rightWrist;
+  const handsSeen =
+    (left && left.visibility >= MIN_VISIBILITY ? 1 : 0) +
+    (right && right.visibility >= MIN_VISIBILITY ? 1 : 0);
+
+  const reachable = zones.filter((z) => touched.has(z.id)).map((z) => z.id);
+  const unreachable = zones.filter((z) => !touched.has(z.id)).map((z) => z.id);
+  const done = unreachable.length === 0;
+
+  return {
+    ok: done,
+    problem: done ? 'none' : handsSeen === 0 ? 'noHands' : 'tooFar',
+    guidance: done
+      ? 'All four touched — you can reach everything from here.'
+      : handsSeen === 0
+        ? 'Hold your hands up where the camera can see them.'
+        : `Touch each target to confirm you can reach it — ${reachable.length} of ${zones.length} done.`,
+    reachable,
+    unreachable,
+    reachRatio: zones.length === 0 ? 1 : reachable.length / zones.length,
+    centre: null,
+    reachRadius: 0,
+  };
+}
+
 export function checkPosition(
   snapshot: PoseSnapshot | null,
   zones: readonly Zone[],

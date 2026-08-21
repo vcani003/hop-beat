@@ -35,7 +35,7 @@ import { LocalAudioAdapter } from '../playback/LocalAudioAdapter.ts';
 import type { PlaybackAdapter } from '../playback/PlaybackAdapter.ts';
 import { GameRenderer } from '../render/pixi/GameRenderer.ts';
 import { scaledZones, usePosePipeline } from '../pose/usePosePipeline.ts';
-import { checkPosition, type PositionCheck } from '../game/positioning.ts';
+import { checkHandPosition, checkPosition, type PositionCheck } from '../game/positioning.ts';
 import { findMode, GAME_MODES, requiresHands } from '../game/modes.ts';
 import { stepZoneScale, zoneScaleForKey } from '../game/targetSizing.ts';
 import type { Zone } from '../game/zones.ts';
@@ -149,6 +149,8 @@ export default function PlayScreen() {
    * not read React state from inside requestAnimationFrame.
    */
   const [position, setPosition] = useState<PositionCheck | null>(null);
+  /** Targets the player has actually touched during the positioning step. */
+  const touchedRef = useRef<Set<string>>(new Set());
   const positionRef = useRef<PositionCheck | null>(null);
   useEffect(() => {
     positionRef.current = position;
@@ -196,6 +198,11 @@ export default function PlayScreen() {
   /** The pose pipeline calls this on every frame it produces. */
   const onPoseFrame = useCallback(
     (events: readonly ZoneEvent[]) => {
+      if (phaseRef.current === 'calibrating') {
+        for (const event of events) {
+          if (event.type === 'ZONE_ENTER') touchedRef.current.add(event.zoneId);
+        }
+      }
       const engine = engineRef.current;
       if (!engine || phaseRef.current !== 'playing' || events.length === 0) return;
       presentJudgments(engine.handleZoneEvents(events));
@@ -382,6 +389,7 @@ export default function PlayScreen() {
 
   /** Open the positioning step. The targets do not change; the advice does. */
   const startPositioning = useCallback(() => {
+    touchedRef.current = new Set();
     setPhase('calibrating');
   }, []);
 
@@ -398,10 +406,26 @@ export default function PlayScreen() {
   useEffect(() => {
     if (phase !== 'calibrating') return;
     const id = window.setInterval(() => {
-      setPosition(checkPosition(snapshotRef.current, zonesRef.current, fieldAspect()));
+      const snapshot = snapshotRef.current;
+      const zones = zonesRef.current;
+      // A hands-only backend reports no torso, so the shoulder-based estimate
+      // cannot run. Touching the targets proves reachability outright, which
+      // is better evidence than any estimate would have been.
+      const check = requiresHands(mode)
+        ? checkHandPosition(snapshot, zones, touchedRef.current)
+        : checkPosition(snapshot, zones, fieldAspect());
+
+      // Having touched every target settles the question in ANY mode. Geometry
+      // that disagrees with a demonstrated fact is the thing that is wrong.
+      const allTouched = zones.every((z) => touchedRef.current.has(z.id));
+      setPosition(
+        allTouched && !check.ok
+          ? { ...check, ok: true, guidance: 'You reached all four — good to go.' }
+          : check,
+      );
     }, POSITION_CHECK_MS);
     return () => window.clearInterval(id);
-  }, [phase, fieldAspect, snapshotRef]);
+  }, [phase, fieldAspect, snapshotRef, zonesRef, mode]);
 
   /** One-time setup: camera, then let the player position and confirm. */
   const setUp = useCallback(async () => {
@@ -556,11 +580,11 @@ export default function PlayScreen() {
               </div>
             )}
 
-            {position && position.unreachable.length > 0 && (
-              <p className="play__hint" style={{ fontSize: '0.72rem' }}>
-                Out of reach: {position.unreachable.length} of 4
-              </p>
-            )}
+            <p className="play__hint" style={{ fontSize: '0.72rem' }}>
+              Touched {position?.reachable.length ?? 0} of{' '}
+              {(position?.reachable.length ?? 0) + (position?.unreachable.length ?? 4)} targets.
+              Reaching them all unlocks this step in any mode.
+            </p>
 
             <div className="sizecontrol">
               <span className="sizecontrol__label">target size</span>

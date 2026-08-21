@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkPosition } from '../src/game/positioning.ts';
+import { checkHandPosition, checkPosition } from '../src/game/positioning.ts';
 import { defaultZones } from '../src/game/zones.ts';
 import { snapshot } from './helpers.ts';
 
@@ -133,5 +133,64 @@ describe('checkPosition — a good spot', () => {
     for (let i = 1; i < ratios.length; i++) {
       expect(ratios[i]).toBeGreaterThan(ratios[i - 1]);
     }
+  });
+});
+
+describe('checkHandPosition — modes with no torso to measure', () => {
+  const hands = (leftVis = 1, rightVis = 1) =>
+    snapshot(0, {
+      leftWrist: { x: 0.3, y: 0.5, visibility: leftVis },
+      rightWrist: { x: 0.7, y: 0.5, visibility: rightVis },
+    });
+
+  const ids = ZONES.map((z) => z.id);
+
+  /**
+   * The bug this exists for: a hands-only backend reports no shoulders, so the
+   * body check returned "no pose" forever and the player could never confirm
+   * their position at all.
+   */
+  it('does not demand shoulders that this backend cannot supply', () => {
+    const result = checkHandPosition(hands(), ZONES, new Set(ids));
+    expect(result.ok).toBe(true);
+    expect(result.problem).toBe('none');
+  });
+
+  it('asks for hands when it cannot see any', () => {
+    const result = checkHandPosition(hands(0.1, 0.1), ZONES, new Set());
+    expect(result.ok).toBe(false);
+    expect(result.problem).toBe('noHands');
+    expect(result.guidance).toMatch(/hands up/i);
+  });
+
+  it('counts progress as targets are touched', () => {
+    const result = checkHandPosition(hands(), ZONES, new Set([ids[0], ids[1]]));
+    expect(result.ok).toBe(false);
+    expect(result.reachable).toHaveLength(2);
+    expect(result.unreachable).toHaveLength(2);
+    expect(result.guidance).toMatch(/2 of 4/);
+  });
+
+  it('only passes once every target has been demonstrated', () => {
+    for (let n = 0; n < ids.length; n++) {
+      const partial = checkHandPosition(hands(), ZONES, new Set(ids.slice(0, n)));
+      expect(partial.ok, `${n} touched`).toBe(false);
+    }
+    expect(checkHandPosition(hands(), ZONES, new Set(ids)).ok).toBe(true);
+  });
+
+  /** Demonstrated reach beats any estimate — that is the whole point. */
+  it('accepts a touch even from a pose the body check would reject', () => {
+    const noBody = snapshot(0, {
+      leftWrist: { x: 0.2, y: 0.24, visibility: 1 },
+    });
+    expect(checkPosition(noBody, ZONES, ASPECT).ok).toBe(false);
+    expect(checkHandPosition(noBody, ZONES, new Set(ids)).ok).toBe(true);
+  });
+
+  it('never modifies the layout it was given', () => {
+    const before = JSON.stringify(ZONES);
+    checkHandPosition(hands(), ZONES, new Set(ids));
+    expect(JSON.stringify(ZONES)).toBe(before);
   });
 });

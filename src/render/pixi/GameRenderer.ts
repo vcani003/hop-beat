@@ -51,6 +51,13 @@ interface Ripple {
 
 export interface RenderState {
   zones: readonly Zone[];
+  /**
+   * True while the zones shown are a PROVISIONAL fit that is still following
+   * the player. Drawn differently on purpose: targets that move are a
+   * contradiction of how this game works (spec §3 anchors them to the screen),
+   * so the one moment they do move must not look like normal play.
+   */
+  zonesArePreview?: boolean;
   notes: readonly ActiveNote[];
   playbackTimeMs: number;
   snapshot: PoseSnapshot | null;
@@ -155,6 +162,15 @@ export class GameRenderer {
       const cy = zone.cy * this.height;
       const r = this.radiusPx(zone);
       const colour = ZONE_COLOUR[zone.id] ?? 0xffffff;
+
+      if (state.zonesArePreview) {
+        // Hollow, faint, and ringed by a wider halo — legible as "this is
+        // where they WOULD go", not as a target to hit.
+        g.circle(cx, cy, r).stroke({ width: 2, color: colour, alpha: 0.5 });
+        g.circle(cx, cy, r * 1.25).stroke({ width: 1, color: colour, alpha: 0.18 });
+        g.circle(cx, cy, 2).fill({ color: colour, alpha: 0.5 });
+        continue;
+      }
 
       g.circle(cx, cy, r).fill({ color: colour, alpha: 0.07 });
       g.circle(cx, cy, r).stroke({ width: 2, color: colour, alpha: 0.55 });

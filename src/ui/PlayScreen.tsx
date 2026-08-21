@@ -35,7 +35,12 @@ import { LocalAudioAdapter } from '../playback/LocalAudioAdapter.ts';
 import type { PlaybackAdapter } from '../playback/PlaybackAdapter.ts';
 import { GameRenderer } from '../render/pixi/GameRenderer.ts';
 import { scaledZones, usePosePipeline } from '../pose/usePosePipeline.ts';
-import { applyCalibration, calibrationFromPose, describeCalibration, type FieldCalibration } from '../game/calibration.ts';
+import {
+  applyCalibration,
+  calibrationFromPose,
+  describeCalibration,
+  type FieldCalibration,
+} from '../game/calibration.ts';
 import type { Zone } from '../game/zones.ts';
 import type { PoseSnapshot } from '../pose/poseTypes.ts';
 import { loadSettings, saveSettings } from './settingsStorage.ts';
@@ -52,15 +57,14 @@ import type { ZoneEvent } from '../game/ZoneTracker.ts';
 type Phase = 'intro' | 'arming' | 'calibrating' | 'menu' | 'playing' | 'paused' | 'results';
 
 /**
- * How long to watch the player before fitting the field to them.
+ * Samples kept while previewing a fit. About a second and a half at 30 Hz.
  *
- * Longer than it needs to be, on purpose. The player presses Play at the
- * keyboard and then walks back into shot, and a fit measured during that walk
- * describes someone standing a foot from the lens. The first stretch is
- * discarded for exactly that reason.
+ * A rolling window rather than everything since the step began: the preview
+ * should describe where the player is NOW, so that stepping back visibly
+ * changes it. Averaging over the whole session would make the preview
+ * increasingly deaf to them moving.
  */
-const CALIBRATION_MS = 4000;
-const CALIBRATION_SETTLE_MS = 2000;
+const CALIBRATION_WINDOW = 45;
 
 /** Published to React at 5 Hz. The hot loop never touches this. */
 interface HudView {
@@ -108,9 +112,15 @@ export default function PlayScreen() {
   // is handed it — ordering here is load-bearing, not stylistic.
   const stageRef = useRef<HTMLDivElement>(null);
   const zonesRef = useRef<Zone[]>(scaledZones(settings.zoneScale));
+  /** The committed fit. Only ever changes when the player confirms one. */
   const calibrationRef = useRef<FieldCalibration | null>(null);
+  /** The provisional fit shown while the player positions themselves. */
+  const previewRef = useRef<FieldCalibration | null>(null);
   const calibrationSamplesRef = useRef<PoseSnapshot[]>([]);
   const collectingRef = useRef(false);
+  const previewReadyRef = useRef(false);
+  const [previewReady, setPreviewReady] = useState(false);
+  const [previewLabel, setPreviewLabel] = useState<string | null>(null);
   const [calibrationLabel, setCalibrationLabel] = useState<string>(describeCalibration(null));
 
   /**
@@ -146,7 +156,9 @@ export default function PlayScreen() {
     phaseRef.current = phase;
   }, [phase]);
 
+  const settingsRef = useRef(settings);
   useEffect(() => {
+    settingsRef.current = settings;
     saveSettings(settings);
   }, [settings]);
 
@@ -166,14 +178,22 @@ export default function PlayScreen() {
   const onPoseFrame = useCallback(
     (events: readonly ZoneEvent[], frame: { snapshot: PoseSnapshot; detected: boolean }) => {
       if (collectingRef.current && frame.detected) {
-        calibrationSamplesRef.current.push(frame.snapshot);
-        // Re-fit live so the player can watch the targets settle onto them
-        // rather than discovering the result after the music starts.
-        if (calibrationSamplesRef.current.length % 5 === 0) {
-          const live = calibrationFromPose(calibrationSamplesRef.current, fieldAspect());
+        const samples = calibrationSamplesRef.current;
+        samples.push(frame.snapshot);
+        if (samples.length > CALIBRATION_WINDOW) samples.shift();
+
+        // Update the PREVIEW only. The committed fit is untouched until the
+        // player confirms, so nothing they are playing against can move.
+        if (samples.length % 5 === 0) {
+          const live = calibrationFromPose(samples, fieldAspect());
           if (live) {
-            calibrationRef.current = live;
-            rebuildZones();
+            previewRef.current = live;
+            zonesRef.current = applyCalibration(scaledZones(settingsRef.current.zoneScale), live);
+            setPreviewLabel(describeCalibration(live));
+            if (!previewReadyRef.current) {
+              previewReadyRef.current = true;
+              setPreviewReady(true);
+            }
           }
         }
       }
@@ -181,7 +201,7 @@ export default function PlayScreen() {
       if (!engine || phaseRef.current !== 'playing' || events.length === 0) return;
       presentJudgments(engine.handleZoneEvents(events));
     },
-    [presentJudgments, rebuildZones, fieldAspect],
+    [presentJudgments, fieldAspect],
   );
 
   const pose = usePosePipeline(settings, zonesRef, fieldAspect, onPoseFrame);
@@ -241,6 +261,7 @@ export default function PlayScreen() {
       if (renderer) {
         renderer.render({
           zones: zonesRef.current,
+          zonesArePreview: phaseRef.current === 'calibrating',
           notes: engine ? engine.getNotes() : [],
           playbackTimeMs: clock ? clock.rawTimeMs() : 0,
           snapshot: snapshotRef.current,
@@ -336,28 +357,42 @@ export default function PlayScreen() {
    * a corner can simply be outside the player's arms, which reads as the
    * tracker failing when nothing is wrong with it.
    */
-  const calibrate = useCallback(async () => {
-    setPhase('calibrating');
+  /**
+   * Begin previewing a fit. Does NOT end on its own.
+   *
+   * A timer was the wrong shape for this: it finished while the player was
+   * still deciding whether they liked where they stood, which reads as the
+   * step ending at random. Confirmation is the player's, so the moment the
+   * targets stop moving is theirs too.
+   */
+  const startFitting = useCallback(() => {
     calibrationSamplesRef.current = [];
+    previewRef.current = null;
+    previewReadyRef.current = false;
+    setPreviewReady(false);
+    setPreviewLabel(null);
     collectingRef.current = true;
+    setPhase('calibrating');
+  }, []);
 
-    // Let the player get into position, then throw that stretch away and keep
-    // only what was measured once they had settled.
-    await new Promise((resolve) => setTimeout(resolve, CALIBRATION_SETTLE_MS));
-    calibrationSamplesRef.current = [];
-    await new Promise((resolve) => setTimeout(resolve, CALIBRATION_MS - CALIBRATION_SETTLE_MS));
+  /** Commit the previewed fit. From here the targets are fixed. */
+  const lockFit = useCallback(() => {
     collectingRef.current = false;
-
-    const fitted = calibrationFromPose(calibrationSamplesRef.current, fieldAspect());
-
-    // Keep the previous fit if this attempt saw nothing usable, rather than
-    // throwing away a good calibration because the player stepped out of shot.
-    if (fitted) calibrationRef.current = fitted;
+    if (previewRef.current) calibrationRef.current = previewRef.current;
     setCalibrationLabel(describeCalibration(calibrationRef.current));
     rebuildZones();
-  }, [rebuildZones, fieldAspect]);
+    setPhase('menu');
+  }, [rebuildZones]);
 
-  /** One-time setup: camera, then fit the field, then hand over to the menu. */
+  /** Abandon the preview and put the previously committed layout back. */
+  const cancelFit = useCallback(() => {
+    collectingRef.current = false;
+    previewRef.current = null;
+    rebuildZones();
+    setPhase('menu');
+  }, [rebuildZones]);
+
+  /** One-time setup: camera, then let the player position and confirm. */
   const setUp = useCallback(async () => {
     setPhase('arming');
     if (pose.status !== 'running') await pose.start();
@@ -365,15 +400,8 @@ export default function PlayScreen() {
       setPhase('intro');
       return;
     }
-    await calibrate();
-    setPhase('menu');
-  }, [pose, calibrate]);
-
-  /** Re-fit without leaving the menu, for when the player has moved. */
-  const refit = useCallback(async () => {
-    await calibrate();
-    setPhase('menu');
-  }, [calibrate]);
+    startFitting();
+  }, [pose, startFitting]);
 
   const pause = useCallback(() => {
     adapterRef.current?.pause();
@@ -488,12 +516,22 @@ export default function PlayScreen() {
         */}
         {phase === 'calibrating' && (
           <div className="play__calibrating">
-            <h2>Get into position</h2>
+            <h2>Where should the targets go?</h2>
             <p className="play__hint">
-              Step back until your shoulders are clearly in frame. The targets are
-              moving to where your arms can reach — watch them settle.
+              Stand where you want to play. The outlines follow you so you can see the
+              fit — they stop moving the moment you lock them in.
             </p>
-            <div className="calbar"><div className="calbar__fill" /></div>
+            <p className="play__hint" style={{ color: previewReady ? 'var(--good)' : 'var(--gold)' }}>
+              {previewReady && previewLabel
+                ? previewLabel
+                : 'Looking for your shoulders — step back until your upper body is in frame.'}
+            </p>
+            <div className="calbuttons">
+              <button className="button--primary" onClick={lockFit} disabled={!previewReady}>
+                Lock targets here
+              </button>
+              <button onClick={cancelFit}>Cancel</button>
+            </div>
           </div>
         )}
 
@@ -602,7 +640,7 @@ export default function PlayScreen() {
 
               <div className="menufit">
                 <span className="menufit__label">{calibrationLabel}</span>
-                <button className="button--quiet" onClick={() => void refit()}>
+                <button className="button--quiet" onClick={startFitting}>
                   Re-fit
                 </button>
               </div>
@@ -754,7 +792,7 @@ export default function PlayScreen() {
         <button
           style={{ marginTop: 8 }}
           disabled={pose.status !== 'running' || phase === 'calibrating' || phase === 'playing'}
-          onClick={() => void refit()}
+          onClick={startFitting}
         >
           Re-fit to me
         </button>

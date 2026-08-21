@@ -673,20 +673,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .tempofix__row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 .tempofix__row button { padding: 5px; font-size: 11px; }
 
-.calbar {
-  height: 4px;
-  border-radius: 100px;
-  background: rgba(255,255,255,0.1);
-  overflow: hidden;
-  margin-top: 0.6rem;
-}
-.calbar__fill {
-  height: 100%;
-  background: var(--violet);
-  animation: calfill 4s linear forwards;
-}
-@keyframes calfill { from { width: 0%; } to { width: 100%; } }
-
 .play__calibrating {
   position: absolute;
   left: 50%;
@@ -733,3 +719,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 .menufit__label { font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
 .menufit button { width: auto; flex: 0 0 auto; font-size: 11px; padding: 5px 10px; }
+
+.calbuttons {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 6px;
+  margin-top: 0.7rem;
+}
+.calbuttons button { padding: 8px; }

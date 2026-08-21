@@ -38,10 +38,15 @@ export function scaledZones(scale: number): Zone[] {
  * concept, and passing them in also lets a consumer define its judgment
  * callbacks before this hook runs — otherwise the callbacks would close over a
  * ref this hook had not returned yet.
+ * @param getAspect the play field's width/height. Also owned by the caller,
+ * and for a sharper reason: zone geometry and hit-testing MUST agree on it. If
+ * the tracker measured aspect from one element and the layout from another,
+ * targets would be drawn in one place and judged in another.
  */
 export function usePosePipeline(
   settings: Settings,
   zonesRef: React.RefObject<Zone[]>,
+  getAspect: () => number,
   onFrame: FrameHandler,
 ) {
   const [status, setStatus] = useState<PipelineStatus>('idle');
@@ -95,13 +100,9 @@ export function usePosePipeline(
     suspectStat.current.push(frame.timestampSuspect ? 1 : 0);
     poseRate.current.tick(now);
 
-    const video = videoRef.current;
-    const aspect =
-      video && video.clientHeight > 0 ? video.clientWidth / video.clientHeight : 16 / 9;
-
-    const events = trackerRef.current.update(frame.snapshot, zonesRef.current, aspect);
+    const events = trackerRef.current.update(frame.snapshot, zonesRef.current, getAspect());
     handlerRef.current(events, frame);
-  }, [zonesRef]);
+  }, [zonesRef, getAspect]);
 
   const teardown = useCallback(() => {
     providerRef.current?.close();

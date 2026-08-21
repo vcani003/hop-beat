@@ -40,9 +40,26 @@ export interface FieldCalibration {
  * its limit — a corner that needs a fully locked-out arm is reachable in
  * theory and miserable in practice.
  */
-const REACH_X_IN_SHOULDERS = 1.15;
-const REACH_UP_IN_SHOULDERS = 0.95;
-const REACH_DOWN_IN_SHOULDERS = 1.05;
+const REACH_X_IN_SHOULDERS = 1.0;
+const REACH_UP_IN_SHOULDERS = 0.85;
+const REACH_DOWN_IN_SHOULDERS = 0.95;
+
+/**
+ * Hard limits on the fitted field, as a fraction of the frame.
+ *
+ * A measurement can be honest and still be useless. Standing close to the
+ * camera — walking back from the keyboard after pressing play, say — makes
+ * shoulders span most of the frame, and a field scaled to that puts every
+ * corner off-screen. Clamping keeps a bad moment from producing an unplayable
+ * layout, and the player can always re-fit once they are in position.
+ */
+const MIN_HALF_WIDTH = 0.12;
+const MAX_HALF_WIDTH = 0.40;
+const MIN_HALF_HEIGHT = 0.10;
+const MAX_HALF_HEIGHT = 0.38;
+
+const clamp = (value: number, low: number, high: number) =>
+  Math.min(high, Math.max(low, value));
 
 /** Below this the pose is too uncertain to calibrate from. */
 const MIN_VISIBILITY = 0.5;
@@ -125,11 +142,14 @@ export function calibrationFromPose(
   const upY = shoulderY - (shoulderWidth * REACH_UP_IN_SHOULDERS) / aspect;
   const downY = hipY + (shoulderWidth * REACH_DOWN_IN_SHOULDERS) / aspect;
 
+  const halfWidth = clamp(shoulderWidth * REACH_X_IN_SHOULDERS, MIN_HALF_WIDTH, MAX_HALF_WIDTH);
+  const halfHeight = clamp((downY - upY) / 2, MIN_HALF_HEIGHT, MAX_HALF_HEIGHT);
+
   return {
-    centreX,
-    centreY: (upY + downY) / 2,
-    halfWidth: shoulderWidth * REACH_X_IN_SHOULDERS,
-    halfHeight: (downY - upY) / 2,
+    centreX: clamp(centreX, 0, 1),
+    centreY: clamp((upY + downY) / 2, 0, 1),
+    halfWidth,
+    halfHeight,
   };
 }
 
@@ -150,18 +170,22 @@ export function applyCalibration(
   // The uncalibrated layout spans 0.2–0.8, so half of its own width is 0.3.
   const scale = halfWidth / 0.3;
 
-  return zones.map((zone) => ({
-    ...zone,
-    cx: clamp01(centreX + (zone.cx - 0.5) * scale),
+  return zones.map((zone) => {
+    const radius = zone.radius * scale;
     // The default layout puts zones at y 0.24 and 0.66 — centred on 0.45, with
     // a half-extent of 0.21.
-    cy: clamp01(centreY + (zone.cy - 0.45) * (halfHeight / 0.21)),
-    radius: zone.radius * scale,
-  }));
-}
+    const cx = centreX + (zone.cx - 0.5) * scale;
+    const cy = centreY + (zone.cy - 0.45) * (halfHeight / 0.21);
 
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value));
+    // Keep the whole target on screen, not just its centre. A zone hanging off
+    // the edge is a zone that cannot be hit, however well the field was fitted.
+    return {
+      ...zone,
+      cx: clamp(cx, radius, 1 - radius),
+      cy: clamp(cy, radius, 1 - radius),
+      radius,
+    };
+  });
 }
 
 /** A short, human-readable description for the calibration UI. */

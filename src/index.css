@@ -683,9 +683,25 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .calbar__fill {
   height: 100%;
   background: var(--violet);
-  animation: calfill 1.6s linear forwards;
+  animation: calfill 4s linear forwards;
 }
 @keyframes calfill { from { width: 0%; } to { width: 100%; } }
+
+.play__calibrating {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(28rem, calc(100% - 2rem));
+  text-align: center;
+  background: rgba(10, 10, 16, 0.82);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  z-index: 4;
+}
+.play__calibrating h2 { margin: 0 0 0.35rem; font-size: 1rem; }
 
 .play__rendererror {
   position: absolute;

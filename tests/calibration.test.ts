@@ -177,3 +177,72 @@ describe('calibrationFromPose — working from shoulders alone', () => {
     expect(describeCalibration(null)).toMatch(/shoulders/);
   });
 });
+
+describe('calibration is clamped to something playable', () => {
+  /**
+   * The reported bug: "each play the map elements are moving out of view."
+   *
+   * The measurement was honest — the player really was that close to the
+   * camera, because they had just pressed Play and were still walking back.
+   * Scaling the field to that moment puts every corner off-screen. A bad
+   * moment must not be able to produce an unplayable layout.
+   */
+  const veryClose = () =>
+    snapshot(0, {
+      leftShoulder: { x: 0.1, y: 0.4, visibility: 1 },
+      rightShoulder: { x: 0.9, y: 0.4, visibility: 1 }, // shoulders span 80% of frame
+      leftHip: { x: 0.2, y: 0.95, visibility: 1 },
+      rightHip: { x: 0.8, y: 0.95, visibility: 1 },
+    });
+
+  it('caps the field even when the player fills the frame', () => {
+    const cal = calibrationFromPose([veryClose()], ASPECT)!;
+    expect(cal.halfWidth).toBeLessThanOrEqual(0.4);
+    expect(cal.halfHeight).toBeLessThanOrEqual(0.38);
+  });
+
+  it('keeps every target fully on screen, not merely its centre', () => {
+    for (const sample of [veryClose(), standing(0, { centreX: 0.05 }), standing(0, { centreX: 0.95 })]) {
+      const cal = calibrationFromPose([sample], ASPECT)!;
+      for (const zone of applyCalibration(defaultZones(), cal)) {
+        expect(zone.cx - zone.radius, `${zone.id} left edge`).toBeGreaterThanOrEqual(-1e-9);
+        expect(zone.cx + zone.radius, `${zone.id} right edge`).toBeLessThanOrEqual(1 + 1e-9);
+        expect(zone.cy - zone.radius, `${zone.id} top edge`).toBeGreaterThanOrEqual(-1e-9);
+        expect(zone.cy + zone.radius, `${zone.id} bottom edge`).toBeLessThanOrEqual(1 + 1e-9);
+      }
+    }
+  });
+
+  it('gives a distant player a field no smaller than a floor', () => {
+    const tiny = snapshot(0, {
+      leftShoulder: { x: 0.49, y: 0.45, visibility: 1 },
+      rightShoulder: { x: 0.51, y: 0.45, visibility: 1 },
+      leftHip: { x: 0.495, y: 0.55, visibility: 1 },
+      rightHip: { x: 0.505, y: 0.55, visibility: 1 },
+    });
+    const cal = calibrationFromPose([tiny], ASPECT)!;
+    expect(cal.halfWidth).toBeGreaterThanOrEqual(0.12);
+    expect(cal.halfHeight).toBeGreaterThanOrEqual(0.1);
+  });
+
+  it('still moves the field with a player who is off to one side', () => {
+    const left = calibrationFromPose([standing(0, { centreX: 0.32 })], ASPECT)!;
+    const right = calibrationFromPose([standing(0, { centreX: 0.68 })], ASPECT)!;
+    const leftZones = applyCalibration(defaultZones(), left);
+    const rightZones = applyCalibration(defaultZones(), right);
+    expect(rightZones[0].cx).toBeGreaterThan(leftZones[0].cx);
+  });
+
+  it('produces the same field twice from the same pose — no drift between plays', () => {
+    const samples = [standing(0), standing(33), standing(66)];
+    const first = calibrationFromPose(samples, ASPECT)!;
+    const second = calibrationFromPose(samples, ASPECT)!;
+    expect(second).toEqual(first);
+
+    // And applying it repeatedly must not compound: the layout is always
+    // rebuilt from the pristine default, never from the previous result.
+    const once = applyCalibration(defaultZones(), first);
+    const twice = applyCalibration(defaultZones(), first);
+    expect(twice).toEqual(once);
+  });
+});

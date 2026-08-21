@@ -45,8 +45,16 @@ import type { ZoneEvent } from '../game/ZoneTracker.ts';
 
 type Phase = 'menu' | 'arming' | 'calibrating' | 'playing' | 'paused' | 'results';
 
-/** How long to watch the player before fitting the field to them. */
-const CALIBRATION_MS = 1600;
+/**
+ * How long to watch the player before fitting the field to them.
+ *
+ * Longer than it needs to be, on purpose. The player presses Play at the
+ * keyboard and then walks back into shot, and a fit measured during that walk
+ * describes someone standing a foot from the lens. The first stretch is
+ * discarded for exactly that reason.
+ */
+const CALIBRATION_MS = 4000;
+const CALIBRATION_SETTLE_MS = 2000;
 
 /** Published to React at 5 Hz. The hot loop never touches this. */
 interface HudView {
@@ -92,11 +100,21 @@ export default function PlayScreen() {
 
   // Declared before the callbacks that read it, and before the pose hook that
   // is handed it — ordering here is load-bearing, not stylistic.
+  const stageRef = useRef<HTMLDivElement>(null);
   const zonesRef = useRef<Zone[]>(scaledZones(settings.zoneScale));
   const calibrationRef = useRef<FieldCalibration | null>(null);
   const calibrationSamplesRef = useRef<PoseSnapshot[]>([]);
   const collectingRef = useRef(false);
   const [calibrationLabel, setCalibrationLabel] = useState<string>(describeCalibration(null));
+
+  /**
+   * Aspect of the play field. Measured from the stage, which is what the Pixi
+   * renderer sizes itself to — so geometry, hit-testing and drawing all agree.
+   */
+  const fieldAspect = useCallback(() => {
+    const stage = stageRef.current;
+    return stage && stage.clientHeight > 0 ? stage.clientWidth / stage.clientHeight : 16 / 9;
+  }, []);
 
   /** Re-derive the zone layout whenever the size setting or the fit changes. */
   const rebuildZones = useCallback(() => {
@@ -110,7 +128,6 @@ export default function PlayScreen() {
     rebuildZones();
   }, [rebuildZones]);
 
-  const stageRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<GameRenderer | null>(null);
   const adapterRef = useRef<PlaybackAdapter | null>(null);
   const clockRef = useRef<GameClock | null>(null);
@@ -144,15 +161,24 @@ export default function PlayScreen() {
     (events: readonly ZoneEvent[], frame: { snapshot: PoseSnapshot; detected: boolean }) => {
       if (collectingRef.current && frame.detected) {
         calibrationSamplesRef.current.push(frame.snapshot);
+        // Re-fit live so the player can watch the targets settle onto them
+        // rather than discovering the result after the music starts.
+        if (calibrationSamplesRef.current.length % 5 === 0) {
+          const live = calibrationFromPose(calibrationSamplesRef.current, fieldAspect());
+          if (live) {
+            calibrationRef.current = live;
+            rebuildZones();
+          }
+        }
       }
       const engine = engineRef.current;
       if (!engine || phaseRef.current !== 'playing' || events.length === 0) return;
       presentJudgments(engine.handleZoneEvents(events));
     },
-    [presentJudgments],
+    [presentJudgments, rebuildZones, fieldAspect],
   );
 
-  const pose = usePosePipeline(settings, zonesRef, onPoseFrame);
+  const pose = usePosePipeline(settings, zonesRef, fieldAspect, onPoseFrame);
   const { snapshotRef, detectedRef, videoRef, renderRate } = pose;
 
   // ---- PixiJS lifecycle ----
@@ -308,19 +334,22 @@ export default function PlayScreen() {
     setPhase('calibrating');
     calibrationSamplesRef.current = [];
     collectingRef.current = true;
-    await new Promise((resolve) => setTimeout(resolve, CALIBRATION_MS));
+
+    // Let the player get into position, then throw that stretch away and keep
+    // only what was measured once they had settled.
+    await new Promise((resolve) => setTimeout(resolve, CALIBRATION_SETTLE_MS));
+    calibrationSamplesRef.current = [];
+    await new Promise((resolve) => setTimeout(resolve, CALIBRATION_MS - CALIBRATION_SETTLE_MS));
     collectingRef.current = false;
 
-    const video = videoRef.current;
-    const aspect = video && video.clientHeight > 0 ? video.clientWidth / video.clientHeight : 16 / 9;
-    const fitted = calibrationFromPose(calibrationSamplesRef.current, aspect);
+    const fitted = calibrationFromPose(calibrationSamplesRef.current, fieldAspect());
 
     // Keep the previous fit if this attempt saw nothing usable, rather than
     // throwing away a good calibration because the player stepped out of shot.
     if (fitted) calibrationRef.current = fitted;
     setCalibrationLabel(describeCalibration(calibrationRef.current));
     rebuildZones();
-  }, [rebuildZones, videoRef]);
+  }, [rebuildZones, fieldAspect]);
 
   /** Camera first, then the fit, then the song. */
   const begin = useCallback(async () => {
@@ -436,16 +465,19 @@ export default function PlayScreen() {
           </div>
         )}
 
+        {/*
+          Deliberately NOT a full-screen overlay: the targets are moving onto
+          the player right now, and hiding them behind a scrim would make the
+          one useful thing on screen invisible.
+        */}
         {phase === 'calibrating' && (
-          <div className="play__overlay">
-            <div className="play__panel">
-              <h2>Fitting the field to you</h2>
-              <p className="play__hint">
-                Stand naturally, facing the camera, with your head and hips in frame.
-                The four targets are being placed where your arms can actually reach.
-              </p>
-              <div className="calbar"><div className="calbar__fill" /></div>
-            </div>
+          <div className="play__calibrating">
+            <h2>Get into position</h2>
+            <p className="play__hint">
+              Step back until your shoulders are clearly in frame. The targets are
+              moving to where your arms can reach — watch them settle.
+            </p>
+            <div className="calbar"><div className="calbar__fill" /></div>
           </div>
         )}
 

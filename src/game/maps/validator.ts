@@ -6,7 +6,7 @@
  * that caused them, because "invalid beatmap" is useless when a chart has
  * four hundred entries.
  */
-import { ZONE_IDS } from '../zones.ts';
+import { TARGET_LAYOUTS, ZONE_IDS } from '../zones.ts';
 import {
   BEATMAP_SCHEMA_VERSION,
   type Beatmap,
@@ -78,6 +78,12 @@ export function validateBeatmap(input: unknown): ValidationResult {
 
   if (map.mapType !== undefined && !MAP_TYPES.includes(map.mapType)) {
     errors.push(`Unknown mapType "${String(map.mapType)}".`);
+  }
+
+  if (map.layoutId !== undefined && !TARGET_LAYOUTS.some((l) => l.id === map.layoutId)) {
+    errors.push(
+      `Unknown layoutId "${String(map.layoutId)}" — this build has: ${TARGET_LAYOUTS.map((l) => l.id).join(', ')}.`,
+    );
   }
 
   // --- notes ---

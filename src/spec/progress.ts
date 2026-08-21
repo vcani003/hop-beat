@@ -173,8 +173,9 @@ export const OPEN_QUESTIONS: OpenQuestion[] = [
   {
     number: 3,
     question: 'How large should screen zones be to feel intentional rather than frustrating?',
-    answer: '0.65× the original radius — about 5% of screen width.',
-    evidence: 'Settled by moving a slider while playing. May need revisiting once notes arrive on a clock.',
+    answer: 'Not one number — it needs to be adjustable without leaving the game.',
+    evidence:
+      'A size settled while standing still felt too small once notes arrived on a clock, and there was no way to change it mid-play. Size is now bound to a key and adjustable during a song. Spec §24 permits this because size moves no target.',
     partial: true,
   },
   {

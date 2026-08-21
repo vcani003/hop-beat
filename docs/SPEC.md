@@ -513,5 +513,96 @@ Essentia.js: https://github.com/MTG/essentia.jsWebAssembly-backed music/audio an
 
 TouchDesigner licensing: https://derivative.ca/UserGuide/TouchDesigner_ProductsNon-Commercial is free for non-paying use with limits; Commercial is required for paid work.
 
-End of specification
+# 24. Target Layouts and Player Positioning
 
+Added after MVP 1. This section is normative and takes precedence where it
+overlaps §3 and §6, which state the same principle less explicitly.
+
+
+## The principle
+
+**Targets are fixed. The player positions themselves to the targets. Never the
+reverse.**
+
+A target's coordinates belong to the game mode, not to whoever is standing in
+front of the camera. They are the same on every run, for every player, on every
+machine.
+
+This is not a stylistic preference. Body-fitted targets break three things at
+once:
+
+- **Learnability.** Muscle memory is most of what a rhythm game trades in, and
+  it requires the upper-left target to be where it was yesterday.
+- **Difficulty.** The travel distance between two notes — and therefore whether
+  a pattern is playable at tempo — must not depend on the player's build or
+  where they happened to stand.
+- **Comparability.** Two people playing the same chart must be playing the same
+  chart.
+
+The corollary is that a player who cannot reach a target has a *positioning*
+problem, and the software's job is to say so and help, not to quietly redefine
+the game.
+
+
+## Target layouts
+
+A layout is a named, fixed set of targets belonging to a game mode.
+
+    TargetLayout
+      id            stable identifier, referenced by beatmaps
+      name          human-readable
+      zones         fixed normalised coordinates and radii
+
+MVP 0 and MVP 1 define one layout, `corners4`: four targets at the corners of
+the play field, per §6.
+
+Later modes may define others — a six-target layout, a layout using floor
+positions for footwork, a wide layout for projection. **Every one of them
+inherits this section's requirement.** A mode does not get to opt out of fixed
+positions because its layout is unusual.
+
+A beatmap references the layout it was authored against. A chart written for
+`corners4` is not automatically playable on a six-target layout, and the map
+schema should say which it needs rather than assume.
+
+
+## The positioning requirement
+
+Before play begins, in every mode, the player must be positioned such that
+**every target in the active layout is reachable**.
+
+The check is generic over layouts: it takes the layout's zones and the player's
+pose, and reports which targets are reachable, which are not, and what the
+player should change. It must never modify the layout.
+
+The physical basis is that reach in *screen* space depends on distance from the
+camera. Close to the lens, an arm span covers most of the frame; far away, very
+little. So:
+
+- targets out of reach -> **move closer to the camera**
+- body cropped by the frame -> **move further away**
+- reach lopsided -> **centre yourself**
+
+There is a workable band between those two, and finding it is the player's
+side of the calibration.
+
+
+## What may be adjusted
+
+Target **size** is a legitimate accessibility and difficulty setting, and may be
+changed by the player at any time, including during play. Size does not move a
+target or change which layout is in use, so it does not violate this section.
+
+Target **position** is not adjustable. If a future mode needs targets somewhere
+else, that is a new layout with a new id, not a per-player adjustment.
+
+
+## Testing
+
+- A positioning check must be proven unable to modify the layout it inspects.
+- Reach advice must be monotonic: approaching the camera must never reduce the
+  number of reachable targets.
+- Every layout ships with a test that all of its targets fit on screen.
+
+
+End of specification

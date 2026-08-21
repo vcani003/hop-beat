@@ -65,6 +65,14 @@ export type MapType = 'generated' | 'curated' | 'handmade';
 
 export interface Beatmap {
   schemaVersion: number;
+  /**
+   * The target layout this chart was authored against. Spec §24: a chart
+   * written for four corners is not automatically playable on another layout,
+   * so the map says which it needs rather than leaving it to be assumed.
+   * Absent means `corners4`, which is all that existed when the format was
+   * defined.
+   */
+  layoutId?: string;
   song: SongMeta;
   analysis: AnalysisMeta;
   difficulty: string;

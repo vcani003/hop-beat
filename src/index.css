@@ -755,3 +755,26 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   width: 2px;
   background: rgba(255, 255, 255, 0.5);
 }
+
+.sizeflash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(10, 10, 16, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  pointer-events: none;
+  z-index: 6;
+  animation: sizeflash 1.4s ease-out forwards;
+}
+@keyframes sizeflash {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.94); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}

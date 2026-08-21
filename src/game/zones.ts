@@ -61,6 +61,38 @@ export function defaultZones(): Zone[] {
  *
  * @param aspect width / height of the play field.
  */
+/**
+ * A named, fixed set of targets belonging to a game mode. Spec §24.
+ *
+ * The layout is the thing that stays put. A mode may define a different one —
+ * six targets, floor positions for footwork, a wide layout for projection —
+ * but every layout inherits §24's rule: its coordinates are fixed, and the
+ * player is positioned to them rather than the other way round.
+ *
+ * Beatmaps name the layout they were authored against, because a chart written
+ * for four corners is not automatically playable on six targets.
+ */
+export interface TargetLayout {
+  id: string;
+  name: string;
+  /** Fresh zones each call, so a caller can never mutate the canonical set. */
+  build: () => Zone[];
+}
+
+export const CORNERS_4: TargetLayout = {
+  id: 'corners4',
+  name: 'Four corners',
+  build: defaultZones,
+};
+
+export const TARGET_LAYOUTS: readonly TargetLayout[] = [CORNERS_4];
+
+export const DEFAULT_LAYOUT_ID = CORNERS_4.id;
+
+export function findLayout(id: string | undefined): TargetLayout {
+  return TARGET_LAYOUTS.find((l) => l.id === id) ?? CORNERS_4;
+}
+
 export function distanceToZone(
   p: { x: number; y: number },
   zone: Zone,

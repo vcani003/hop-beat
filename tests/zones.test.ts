@@ -4,6 +4,9 @@ import {
   distanceToZone,
   isInsideZone,
   sweptDistanceToZone,
+  CORNERS_4,
+  findLayout,
+  TARGET_LAYOUTS,
   ZONE_IDS,
   type Zone,
 } from '../src/game/zones.ts';
@@ -136,5 +139,41 @@ describe('sweptDistanceToZone', () => {
     const aspect = 16 / 9;
     const still = sweptDistanceToZone(p(0.5, 0.6), p(0.5, 0.6), zone(), aspect);
     expect(still.distance).toBeCloseTo(distanceToZone(p(0.5, 0.6), zone(), aspect));
+  });
+});
+
+describe('target layouts — spec §24', () => {
+  /**
+   * "Every layout ships with a test that all of its targets fit on screen."
+   * A layout is a promise that these coordinates are playable; a target
+   * hanging off the edge breaks that promise for every chart that names it.
+   */
+  it('keeps every target of every layout fully on screen', () => {
+    for (const layout of TARGET_LAYOUTS) {
+      for (const zone of layout.build()) {
+        expect(zone.cx - zone.radius, `${layout.id}/${zone.id} left`).toBeGreaterThanOrEqual(0);
+        expect(zone.cx + zone.radius, `${layout.id}/${zone.id} right`).toBeLessThanOrEqual(1);
+        expect(zone.cy - zone.radius, `${layout.id}/${zone.id} top`).toBeGreaterThanOrEqual(0);
+        expect(zone.cy + zone.radius, `${layout.id}/${zone.id} bottom`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('gives every layout a unique id', () => {
+    const ids = TARGET_LAYOUTS.map((l) => l.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  /** A caller must not be able to mutate the canonical layout. */
+  it('hands out a fresh copy of the zones each time', () => {
+    const first = CORNERS_4.build();
+    first[0].cx = 0.999;
+    expect(CORNERS_4.build()[0].cx).toBe(0.2);
+  });
+
+  it('falls back to four corners for an unknown or missing id', () => {
+    expect(findLayout(undefined).id).toBe('corners4');
+    expect(findLayout('does-not-exist').id).toBe('corners4');
+    expect(findLayout('corners4')).toBe(CORNERS_4);
   });
 });

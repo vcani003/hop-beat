@@ -36,6 +36,7 @@ import type { PlaybackAdapter } from '../playback/PlaybackAdapter.ts';
 import { GameRenderer } from '../render/pixi/GameRenderer.ts';
 import { scaledZones, usePosePipeline } from '../pose/usePosePipeline.ts';
 import { checkPosition, type PositionCheck } from '../game/positioning.ts';
+import { zoneScaleForKey } from '../game/targetSizing.ts';
 import type { Zone } from '../game/zones.ts';
 import { loadSettings, saveSettings } from './settingsStorage.ts';
 import { navigate } from './useHashRoute.ts';
@@ -108,6 +109,22 @@ export default function PlayScreen() {
   useEffect(() => {
     zonesRef.current = scaledZones(settings.zoneScale);
   }, [settings.zoneScale]);
+
+  /**
+   * A brief on-screen readout after a size change, so the player sees the new
+   * value without looking away from the game.
+   *
+   * Held as state with a timer rather than compared against the clock during
+   * render — reading Date.now() while rendering makes output depend on when
+   * React happens to re-run the component.
+   */
+  const [sizeFlash, setSizeFlash] = useState<string | null>(null);
+  const sizeFlashTimer = useRef<number | null>(null);
+  const flashSize = useCallback((scale: number) => {
+    setSizeFlash(`${scale.toFixed(2)}×`);
+    if (sizeFlashTimer.current !== null) window.clearTimeout(sizeFlashTimer.current);
+    sizeFlashTimer.current = window.setTimeout(() => setSizeFlash(null), 1400);
+  }, []);
 
   /**
    * Live advice while the player finds a spot they can play from.
@@ -324,6 +341,29 @@ export default function PlayScreen() {
    * a corner can simply be outside the player's arms, which reads as the
    * tracker failing when nothing is wrong with it.
    */
+  /**
+   * Resize targets from anywhere, including mid-song.
+   *
+   * Spec §24 permits this — size is a difficulty and accessibility setting and
+   * moves nothing. Hunting a settings panel while a song runs is not a real
+   * option, which is the whole reason this is bound to a key.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+
+      const next = zoneScaleForKey(event.key, settingsRef.current.zoneScale);
+      if (next === null) return;
+      event.preventDefault();
+      setSettings((prev) => ({ ...prev, zoneScale: next }));
+      flashSize(next);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [flashSize]);
+
   /** Open the positioning step. The targets do not change; the advice does. */
   const startPositioning = useCallback(() => {
     setPhase('calibrating');
@@ -421,6 +461,8 @@ export default function PlayScreen() {
           playsInline
           muted
         />
+        {sizeFlash && <div className="sizeflash mono">target size {sizeFlash}</div>}
+
         {rendererError && (
           <div className="play__rendererror">
             {rendererError}

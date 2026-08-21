@@ -89,6 +89,7 @@ scripts/
 docs/
   SPEC.md                 the specification, in markdown
   DECISIONS.md            decisions taken beyond the spec
+  GESTURES.md             gesture design, planned before building
   hop-beat-spec-v1.docx   the original document
   concept-mockup.png      visual direction: light, dark and outline modes
 ```

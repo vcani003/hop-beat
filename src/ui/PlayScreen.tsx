@@ -36,7 +36,7 @@ import type { PlaybackAdapter } from '../playback/PlaybackAdapter.ts';
 import { GameRenderer } from '../render/pixi/GameRenderer.ts';
 import { scaledZones, usePosePipeline } from '../pose/usePosePipeline.ts';
 import { checkPosition, type PositionCheck } from '../game/positioning.ts';
-import { zoneScaleForKey } from '../game/targetSizing.ts';
+import { stepZoneScale, zoneScaleForKey } from '../game/targetSizing.ts';
 import type { Zone } from '../game/zones.ts';
 import { loadSettings, saveSettings } from './settingsStorage.ts';
 import { navigate } from './useHashRoute.ts';
@@ -120,11 +120,24 @@ export default function PlayScreen() {
    */
   const [sizeFlash, setSizeFlash] = useState<string | null>(null);
   const sizeFlashTimer = useRef<number | null>(null);
+
   const flashSize = useCallback((scale: number) => {
     setSizeFlash(`${scale.toFixed(2)}×`);
     if (sizeFlashTimer.current !== null) window.clearTimeout(sizeFlashTimer.current);
     sizeFlashTimer.current = window.setTimeout(() => setSizeFlash(null), 1400);
   }, []);
+
+  /** One step bigger or smaller, from a button or a key. */
+  const nudgeSize = useCallback(
+    (steps: number) => {
+      setSettings((prev) => {
+        const zoneScale = stepZoneScale(prev.zoneScale, steps);
+        flashSize(zoneScale);
+        return { ...prev, zoneScale };
+      });
+    },
+    [flashSize],
+  );
 
   /**
    * Live advice while the player finds a spot they can play from.
@@ -545,6 +558,13 @@ export default function PlayScreen() {
               </p>
             )}
 
+            <div className="sizecontrol">
+              <span className="sizecontrol__label">target size</span>
+              <button onClick={() => nudgeSize(-1)} aria-label="Smaller targets">−</button>
+              <span className="sizecontrol__value mono">{settings.zoneScale.toFixed(2)}×</span>
+              <button onClick={() => nudgeSize(1)} aria-label="Bigger targets">+</button>
+            </div>
+
             <div className="calbuttons calbuttons--two">
               <button
                 className="button--primary"
@@ -784,6 +804,18 @@ export default function PlayScreen() {
           <strong>Bias</strong> is which way you are off, and the offset slider cancels
           it. <strong>Spread</strong> is how tight you are — a large spread with a small
           bias means the windows are hard, not miscalibrated.
+        </p>
+
+        <h2 className="panel__heading" style={{ marginTop: 18 }}>Targets</h2>
+        <div className="sizecontrol">
+          <span className="sizecontrol__label">size</span>
+          <button onClick={() => nudgeSize(-1)} aria-label="Smaller targets">−</button>
+          <span className="sizecontrol__value mono">{settings.zoneScale.toFixed(2)}×</span>
+          <button onClick={() => nudgeSize(1)} aria-label="Bigger targets">+</button>
+        </div>
+        <p className="hint" style={{ marginTop: 8 }}>
+          Works during a song. <kbd>[</kbd> <kbd>]</kbd> do the same from the keyboard.
+          Size never moves a target — spec §24.
         </p>
 
         <h2 className="panel__heading" style={{ marginTop: 18 }}>View</h2>

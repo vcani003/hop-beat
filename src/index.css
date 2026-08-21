@@ -778,3 +778,34 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   70% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+.sizecontrol {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 6px 6px 11px;
+  margin-top: 0.6rem;
+}
+.sizecontrol__label { font-size: 0.72rem; color: var(--muted); text-align: left; }
+.sizecontrol__value { font-size: 0.8rem; font-weight: 700; min-width: 3.2rem; text-align: center; }
+.sizecontrol button {
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  font-size: 17px;
+  line-height: 1;
+}
+
+kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+}

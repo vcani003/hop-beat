@@ -62,20 +62,23 @@ describe('ZoneTracker — entering', () => {
     }
   });
 
-  it('refuses a landmark the model is not confident about', () => {
+  it('refuses a landmark the model is not confident about, and says so', () => {
     const events = tracker.update(
       snapshot(0, { leftWrist: at(0, 0.2) }),
       ZONES,
       ASPECT,
     );
-    expect(events).toEqual([]);
+    expect(events.map((e) => e.type)).toEqual(['ZONE_BLOCKED']);
+    expect(events[0].reason).toBe('visibility');
   });
 
   it('refuses a landmark extrapolated outside the camera frame', () => {
     const t = new ZoneTracker(config({ requireInFrame: true }));
     const offscreen = { x: -0.02, y: 0.25, visibility: 1 };
     const edgeZone: Zone = { ...ZONE, cx: 0.02, radius: 0.1 };
-    expect(t.update(snapshot(0, { leftWrist: offscreen }), [edgeZone], ASPECT)).toEqual([]);
+    const events = t.update(snapshot(0, { leftWrist: offscreen }), [edgeZone], ASPECT);
+    expect(events.map((e) => e.type)).toEqual(['ZONE_BLOCKED']);
+    expect(events[0].reason).toBe('visibility');
   });
 
   it('tracks both wrists in the same zone independently', () => {
@@ -172,7 +175,12 @@ describe('ZoneTracker — refractory period', () => {
     const tracker = new ZoneTracker(config({ exitGraceMs: 0, refractoryMs: 200 }));
     tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT);
     tracker.update(snapshot(33, { leftWrist: at(0.5) }), ZONES, ASPECT);
-    expect(tracker.update(snapshot(100, { leftWrist: at(0) }), ZONES, ASPECT)).toEqual([]);
+
+    const refused = tracker.update(snapshot(100, { leftWrist: at(0) }), ZONES, ASPECT);
+    expect(refused.map((e) => e.type)).toEqual(['ZONE_BLOCKED']);
+
+    // Withdraw, then approach again after the window has elapsed.
+    tracker.update(snapshot(150, { leftWrist: at(0.5) }), ZONES, ASPECT);
     const events = tracker.update(snapshot(240, { leftWrist: at(0) }), ZONES, ASPECT);
     expect(events.map((e) => e.type)).toEqual(['ZONE_ENTER']);
   });
@@ -194,5 +202,90 @@ describe('ZoneTracker — lifecycle', () => {
     for (let t = 0; t < 1000; t += 33) {
       expect(tracker.update(snapshot(t, {}), ZONES, ASPECT)).toEqual([]);
     }
+  });
+});
+
+describe('ZoneTracker — blocked hits are observable, not merely suspected', () => {
+  /**
+   * The failure these tests pin down: with a long refractory window, a genuine
+   * rapid double-hit is silently swallowed. Silence is the problem — the
+   * tracker must say so, or tuning is guesswork.
+   */
+  it('reports a rapid re-entry that the refractory window swallowed', () => {
+    const tracker = new ZoneTracker(config({ exitGraceMs: 0, refractoryMs: 360 }));
+    tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT); // hit 1
+    tracker.update(snapshot(60, { leftWrist: at(0.5) }), ZONES, ASPECT); // away
+
+    // A second deliberate hit 250 ms after the first — an eighth note at 120 BPM.
+    const events = tracker.update(snapshot(250, { leftWrist: at(0) }), ZONES, ASPECT);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'ZONE_BLOCKED',
+      reason: 'refractory',
+      zoneId: 'upperLeft',
+      limb: 'leftWrist',
+    });
+    expect(events[0].remainingMs).toBe(170);
+    expect(tracker.blockedCounts().refractory).toBe(1);
+  });
+
+  it('counts one blocked event per approach, not one per frame', () => {
+    const tracker = new ZoneTracker(config({ exitGraceMs: 0, refractoryMs: 400 }));
+    tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT);
+    tracker.update(snapshot(30, { leftWrist: at(0.5) }), ZONES, ASPECT);
+
+    // Wrist parked inside the locked-out zone for ten consecutive frames.
+    let blocked = 0;
+    for (let t = 60; t < 360; t += 30) {
+      blocked += tracker.update(snapshot(t, { leftWrist: at(0) }), ZONES, ASPECT).length;
+    }
+    expect(blocked).toBe(1);
+    expect(tracker.blockedCounts().refractory).toBe(1);
+  });
+
+  it('re-arms so a later approach is reported separately', () => {
+    const tracker = new ZoneTracker(config({ exitGraceMs: 0, refractoryMs: 400 }));
+    tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT);
+    tracker.update(snapshot(30, { leftWrist: at(0.5) }), ZONES, ASPECT);
+    tracker.update(snapshot(100, { leftWrist: at(0) }), ZONES, ASPECT); // blocked
+    tracker.update(snapshot(160, { leftWrist: at(0.5) }), ZONES, ASPECT); // withdraw
+    tracker.update(snapshot(220, { leftWrist: at(0) }), ZONES, ASPECT); // blocked again
+    expect(tracker.blockedCounts().refractory).toBe(2);
+  });
+
+  it('distinguishes a low-confidence refusal from a lockout', () => {
+    const tracker = new ZoneTracker(config({ refractoryMs: 0, minVisibility: 0.5 }));
+    const events = tracker.update(snapshot(0, { leftWrist: at(0, 0.2) }), ZONES, ASPECT);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: 'ZONE_BLOCKED', reason: 'visibility' });
+    expect(events[0].remainingMs).toBeUndefined();
+    expect(tracker.blockedCounts()).toEqual({ refractory: 0, visibility: 1 });
+  });
+
+  it('stays silent when the refractory window has genuinely elapsed', () => {
+    const tracker = new ZoneTracker(config({ exitGraceMs: 0, refractoryMs: 360 }));
+    tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT);
+    tracker.update(snapshot(60, { leftWrist: at(0.5) }), ZONES, ASPECT);
+    const events = tracker.update(snapshot(500, { leftWrist: at(0) }), ZONES, ASPECT);
+    expect(events.map((e) => e.type)).toEqual(['ZONE_ENTER']);
+    expect(tracker.blockedCounts().refractory).toBe(0);
+  });
+
+  it('reports nothing for a wrist that never approaches a zone', () => {
+    const tracker = new ZoneTracker(config({ refractoryMs: 400 }));
+    for (let t = 0; t < 600; t += 30) {
+      expect(tracker.update(snapshot(t, { leftWrist: at(0.6) }), ZONES, ASPECT)).toEqual([]);
+    }
+    expect(tracker.blockedCounts()).toEqual({ refractory: 0, visibility: 0 });
+  });
+
+  it('clears its counters on reset', () => {
+    const tracker = new ZoneTracker(config({ exitGraceMs: 0, refractoryMs: 400 }));
+    tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT);
+    tracker.update(snapshot(30, { leftWrist: at(0.5) }), ZONES, ASPECT);
+    tracker.update(snapshot(60, { leftWrist: at(0) }), ZONES, ASPECT);
+    expect(tracker.blockedCounts().refractory).toBe(1);
+    tracker.reset();
+    expect(tracker.blockedCounts()).toEqual({ refractory: 0, visibility: 0 });
   });
 });

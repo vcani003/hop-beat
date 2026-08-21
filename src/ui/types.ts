@@ -16,17 +16,25 @@ export interface Settings {
   requireInFrame: boolean;
 }
 
+/**
+ * Tuned on real hardware rather than chosen on paper.
+ *
+ * Note the strategy this represents: hysteresis is OFF (1.00x) and chatter is
+ * suppressed by a re-entry lockout instead. That trade is deliberate and it
+ * works — but the lockout is also a hard ceiling on repeat-hit tempo, which is
+ * why the HUD now counts the hits it refuses. See docs/DECISIONS.md.
+ */
 export const DEFAULT_SETTINGS: Settings = {
-  modelVariant: 'lite',
-  delegate: 'GPU',
+  modelVariant: 'full',
+  delegate: 'CPU',
   mirrored: true,
-  showVideo: true,
+  showVideo: false,
   showSkeleton: true,
-  zoneScale: 1,
-  minVisibility: 0.5,
-  exitRadiusScale: 1.3,
-  exitGraceMs: 80,
-  refractoryMs: 0,
+  zoneScale: 0.65,
+  minVisibility: 0.4,
+  exitRadiusScale: 1.0,
+  exitGraceMs: 40,
+  refractoryMs: 360,
   requireInFrame: true,
 };
 
@@ -70,11 +78,13 @@ export const EMPTY_TELEMETRY: TelemetryView = {
 
 export interface LogEntry {
   id: number;
-  type: 'ZONE_ENTER' | 'ZONE_EXIT';
+  type: 'ZONE_ENTER' | 'ZONE_EXIT' | 'ZONE_BLOCKED';
   zoneId: string;
   limb: string;
   timestampMs: number;
   dwellMs?: number;
+  reason?: 'refractory' | 'visibility';
+  remainingMs?: number;
   /** Age of the camera frame when the event was produced. */
   latencyMs: number;
 }

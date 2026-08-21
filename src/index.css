@@ -228,6 +228,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   align-items: baseline;
 }
 .log__row--exit { opacity: 0.42; }
+.log__row--blocked {
+  background: rgba(248,113,113,0.1);
+  border-left: 2px solid var(--bad);
+}
 .log__time { color: var(--muted); }
 .log__meta { color: var(--muted); font-size: 10px; }
 .log__empty { color: var(--muted); font-size: 11px; padding: 6px 0; }
@@ -246,3 +250,32 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .hint { font-size: 11px; color: var(--muted); line-height: 1.55; }
 
 .counter { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+
+/* ---- session ---- */
+
+.zonegrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.zonegrid__cell {
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.zonegrid__label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
+.zonegrid__hits { font-size: 19px; font-weight: 700; }
+.zonegrid__blocked { font-size: 9px; color: var(--bad); }
+
+.buttonrow {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 6px;
+  margin-top: 10px;
+}

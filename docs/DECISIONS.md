@@ -83,6 +83,35 @@ summary into React state for the HUD.
 Feedback the player *feels* — the ring that fires on zone entry — is drawn on
 the canvas, never rendered by React, so it is never behind the interaction.
 
+### 7. Refused hits are reported, not merely refused
+
+First real-webcam session surfaced a complaint the tracker could not answer:
+"rapid firing isn't capturing all the time." Nothing in the event stream said
+whether a hit had been missed by the model, missed by the geometry, or refused
+by the tracker's own settings — the three have completely different fixes.
+
+`ZoneTracker` now emits a third, **diagnostic-only** event: `ZONE_BLOCKED`,
+carrying the reason (`refractory` or `visibility`). It fires once per approach,
+not once per frame, so "3 hits were swallowed" means what it says. Gameplay
+consumes only `ZONE_ENTER` / `ZONE_EXIT`.
+
+### 8. Sessions are recorded and exportable
+
+`SessionRecorder` accumulates every event and derives a summary. The statistic
+that matters is the **repeat interval**: the fastest gap between accepted hits
+on the *same* zone and limb, which is a hard upper bound on playable tempo.
+When the fastest *refused* repeat is quicker than the fastest accepted one, the
+settings — not the player — are the ceiling, and the panel says so.
+
+Exported JSON carries the tuning and the machine alongside the events. A
+latency figure without its model, delegate and camera format is not evidence.
+
+### 9. Settings persist to localStorage
+
+These values are tuning found by standing in front of a camera, not
+preferences. Losing them on reload makes every session start from scratch.
+Corrupt stored data falls back to defaults rather than throwing.
+
 ---
 
 ## Measurements
@@ -102,11 +131,45 @@ steady state; CPU initialises faster. SIMD is supported.
 **Not yet measured on real hardware with a real person:** end-to-end input
 latency. See "Open after MVP 0" below.
 
+### Hysteresis versus refractory, simulated at a 30 Hz pose rate
+
+The first tuned configuration suppressed boundary chatter with a 360 ms
+re-entry lockout and hysteresis disabled (`1.00×`). Both mechanisms were then
+measured against the two failures they exist to prevent — a hand held wobbling
+on the zone boundary, and genuine fast repeat hits on one target.
+
+Zone radius `0.049` field units (`zoneScale 0.65`), exit grace 40 ms.
+
+| Configuration | Spurious hits, 10 s edge hover | 16ths @ 90 BPM (167 ms) | 8ths @ 120 BPM (250 ms) |
+|---|---|---|---|
+| hyst `1.00×`, refr `360 ms` | 14 | 12 / 35 | 12 / 24 |
+| hyst `1.00×`, refr `0 ms` | 19 | — | — |
+| hyst `1.25×`, refr `0 ms` | **1** | **34 / 35** | **24 / 24** |
+| hyst `1.40×`, refr `0 ms` | 1 | 34 / 35 | 24 / 24 |
+
+The lockout turns out to be a poor chatter suppressor — it only cut spurious
+entries from 19 to 14, because a 360 ms window still permits nearly three false
+hits a second — while costing more than half of all repeat hits above 120 BPM.
+
+Hysteresis does the same job far better (14 → 1, where 1 is the single genuine
+entry) and costs no tempo at all, because it constrains *leaving* rather than
+*returning*.
+
+**Conclusion: hysteresis is the correct chatter mechanism; the refractory
+period should stay near zero and exists only as an escape hatch.** The two are
+not interchangeable, and the earlier framing in decision 4 that treated them as
+parallel options was wrong.
+
 ---
 
 ## Open after MVP 0
 
 - Real-webcam input latency, with `timestampSuspect` reading 0%.
+- Whether a fast wrist can *tunnel* through a zone entirely between two pose
+  frames. At 30 Hz a hand crossing the screen in 0.5 s moves ~0.066 field units
+  per frame against a 0.098-unit zone diameter, so this is plausible. The fix
+  would be swept-segment collision — testing the path between consecutive wrist
+  positions rather than the positions themselves. Not yet built.
 - Whether `lite` is sufficient or `full` is needed for wrist accuracy in motion.
 - Zone radius that feels intentional (§20 #3) — needs a person and a slider.
 - Whether zone *entry* is the right hit semantic, or dwell/velocity/crossing

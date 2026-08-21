@@ -26,11 +26,18 @@ import { defaultZones, type Zone } from './game/zones.ts';
 import { ZoneTracker } from './game/ZoneTracker.ts';
 import { drawScene, isFlashAlive, resizeCanvas, type HitFlash } from './debug/DebugCanvas.ts';
 import { RateCounter, RollingStat } from './debug/telemetry.ts';
+import {
+  buildSessionDocument,
+  summarise,
+  type RecordedEvent,
+  type SessionSummary,
+} from './debug/SessionRecorder.ts';
 import ControlPanel from './ui/ControlPanel.tsx';
 import DebugHud from './ui/DebugHud.tsx';
 import EventLog from './ui/EventLog.tsx';
+import SessionPanel from './ui/SessionPanel.tsx';
+import { loadSettings, saveSettings } from './ui/settingsStorage.ts';
 import {
-  DEFAULT_SETTINGS,
   EMPTY_TELEMETRY,
   type LogEntry,
   type Settings,
@@ -41,6 +48,9 @@ type Status = 'idle' | 'loading' | 'running' | 'error';
 
 const HUD_INTERVAL_MS = 200;
 const MAX_LOG_ENTRIES = 40;
+/** A ceiling on recorded events so a forgotten tab cannot grow without bound. */
+const MAX_RECORDED_EVENTS = 20_000;
+const EMPTY_SUMMARY = summarise([]);
 
 function scaledZones(scale: number): Zone[] {
   return defaultZones().map((z) => ({ ...z, radius: z.radius * scale }));
@@ -49,9 +59,11 @@ function scaledZones(scale: number): Zone[] {
 export default function App() {
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<{ message: string; hint: string } | null>(null);
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  // Lazy initialiser: read stored tuning once, not on every render.
+  const [settings, setSettings] = useState<Settings>(loadSettings);
   const [telemetry, setTelemetry] = useState<TelemetryView>(EMPTY_TELEMETRY);
   const [log, setLog] = useState<LogEntry[]>([]);
+  const [summary, setSummary] = useState<SessionSummary>(EMPTY_SUMMARY);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -60,12 +72,15 @@ export default function App() {
   const providerRef = useRef<MediaPipePoseProvider | null>(null);
   const cameraRef = useRef<CameraInfo | null>(null);
   const trackerRef = useRef(new ZoneTracker());
-  const zonesRef = useRef<Zone[]>(scaledZones(DEFAULT_SETTINGS.zoneScale));
+  const zonesRef = useRef<Zone[]>(scaledZones(settings.zoneScale));
   const settingsRef = useRef(settings);
   const snapshotRef = useRef<PoseSnapshot | null>(null);
   const detectedRef = useRef(false);
   const flashesRef = useRef<HitFlash[]>([]);
   const pendingLogRef = useRef<LogEntry[]>([]);
+  /** The full session, kept out of React so recording costs nothing per frame. */
+  const recordedRef = useRef<RecordedEvent[]>([]);
+  const recordingDirtyRef = useRef(false);
   const logIdRef = useRef(0);
   const totalEntersRef = useRef(0);
   const rafRef = useRef<number | null>(null);
@@ -79,6 +94,7 @@ export default function App() {
   // Mirror settings into a ref so the hot path reads them without re-binding
   // the pose callback (which would restart inference on every slider drag).
   useEffect(() => {
+    saveSettings(settings);
     settingsRef.current = settings;
     zonesRef.current = scaledZones(settings.zoneScale);
     trackerRef.current.setConfig({
@@ -115,6 +131,10 @@ export default function App() {
         flashesRef.current.push({ zoneId: event.zoneId, startedAt: now });
         totalEntersRef.current += 1;
       }
+      // How old the camera frame already was when the event was produced. This
+      // is the honest input-latency number MVP 1 will have to live with.
+      const latencyMs = now - event.timestampMs;
+
       pendingLogRef.current.push({
         id: logIdRef.current++,
         type: event.type,
@@ -122,10 +142,15 @@ export default function App() {
         limb: event.limb,
         timestampMs: event.timestampMs,
         dwellMs: event.dwellMs,
-        // How old the camera frame already was when the event was produced.
-        // This is the honest input-latency number MVP 1 will have to live with.
-        latencyMs: now - event.timestampMs,
+        reason: event.reason,
+        remainingMs: event.remainingMs,
+        latencyMs,
       });
+
+      if (recordedRef.current.length < MAX_RECORDED_EVENTS) {
+        recordedRef.current.push({ ...event, latencyMs });
+        recordingDirtyRef.current = true;
+      }
     }
   }, []);
 
@@ -197,6 +222,12 @@ export default function App() {
         pendingLogRef.current = [];
         setLog((prev) => [...incoming.reverse(), ...prev].slice(0, MAX_LOG_ENTRIES));
       }
+
+      // Re-derive the summary only when something was actually recorded.
+      if (recordingDirtyRef.current) {
+        recordingDirtyRef.current = false;
+        setSummary(summarise(recordedRef.current));
+      }
     }, HUD_INTERVAL_MS);
 
     return () => window.clearInterval(id);
@@ -239,6 +270,8 @@ export default function App() {
 
       trackerRef.current.reset();
       totalEntersRef.current = 0;
+      recordedRef.current = [];
+      setSummary(EMPTY_SUMMARY);
       setLog([]);
       provider.start(video, onPoseFrame);
       setStatus('running');
@@ -312,6 +345,57 @@ export default function App() {
     void reloadModel();
   }, [settings.modelVariant, settings.delegate, reloadModel]);
 
+  /**
+   * Hand the recorded session to the user as a file.
+   *
+   * Everything needed to interpret the numbers travels with them — the tuning
+   * that produced them and the machine that measured them — because a latency
+   * figure without its model, delegate and camera format is not evidence of
+   * anything.
+   */
+  const exportSession = useCallback(() => {
+    const document_ = buildSessionDocument(
+      recordedRef.current,
+      settingsRef.current,
+      {
+        camera: cameraRef.current
+          ? {
+              label: cameraRef.current.label,
+              width: cameraRef.current.width,
+              height: cameraRef.current.height,
+              frameRate: cameraRef.current.frameRate,
+            }
+          : null,
+        frameClockSource: providerRef.current?.frameClockSource ?? null,
+        usesFrameCallback: providerRef.current?.usesFrameCallback ?? false,
+        poseHz: telemetry.poseHz,
+        inferenceMeanMs: telemetry.inferenceMeanMs,
+        inferenceP95Ms: telemetry.inferenceP95Ms,
+        latencyMeanMs: telemetry.latencyMeanMs,
+        latencyP95Ms: telemetry.latencyP95Ms,
+        timestampSuspectRatio: telemetry.suspectRatio,
+        userAgent: navigator.userAgent,
+      },
+      new Date().toISOString(),
+    );
+
+    const blob = new Blob([JSON.stringify(document_, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = window.document.createElement('a');
+    anchor.href = url;
+    anchor.download = `hopbeat-mvp0-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [telemetry]);
+
+  const clearSession = useCallback(() => {
+    recordedRef.current = [];
+    totalEntersRef.current = 0;
+    trackerRef.current.reset();
+    setSummary(EMPTY_SUMMARY);
+    setLog([]);
+  }, []);
+
   useEffect(() => teardown, [teardown]);
 
   const live = status === 'running';
@@ -379,9 +463,15 @@ export default function App() {
 
         <DebugHud telemetry={telemetry} live={live} settings={settings} />
 
+        <SessionPanel
+          summary={summary}
+          refractoryMs={settings.refractoryMs}
+          onExport={exportSession}
+          onClear={clearSession}
+        />
+
         <div className="panel__section">
-          <h2 className="panel__heading">Zone entries</h2>
-          <div className="counter mono">{telemetry.totalEnters}</div>
+          <h2 className="panel__heading">Event log</h2>
           <EventLog entries={log} />
         </div>
 

@@ -6,6 +6,8 @@ import {
   grade,
   initialScoreState,
   meanAbsDeltaMs,
+  meanDeltaMs,
+  suggestedOffsetMs,
 } from '../src/game/engine/ScoreSystem.ts';
 
 const play = (sequence: Array<[('PERFECT' | 'GOOD' | 'MISS'), number]>) =>
@@ -99,5 +101,59 @@ describe('timing error', () => {
   it('is null when nothing has been hit', () => {
     expect(meanAbsDeltaMs(play([['MISS', 0]]))).toBeNull();
     expect(meanAbsDeltaMs(initialScoreState())).toBeNull();
+  });
+});
+
+describe('timing bias vs spread', () => {
+  /**
+   * The distinction the calibration UI depends on. A player who is 60 ms early
+   * half the time and 60 ms late the rest has the same mean ABSOLUTE error as
+   * one who is 60 ms late every time — but only the second has a problem the
+   * offset slider can fix.
+   */
+  it('separates being inconsistent from being consistently late', () => {
+    const scattered = play([['GOOD', -60], ['GOOD', 60], ['GOOD', -60], ['GOOD', 60]]);
+    const alwaysLate = play([['GOOD', 60], ['GOOD', 60], ['GOOD', 60], ['GOOD', 60]]);
+
+    expect(meanAbsDeltaMs(scattered)).toBeCloseTo(60);
+    expect(meanAbsDeltaMs(alwaysLate)).toBeCloseTo(60);
+
+    expect(meanDeltaMs(scattered)).toBeCloseTo(0);
+    expect(meanDeltaMs(alwaysLate)).toBeCloseTo(60);
+  });
+
+  it('reports early as negative', () => {
+    expect(meanDeltaMs(play([['PERFECT', -30], ['PERFECT', -50]]))).toBeCloseTo(-40);
+  });
+
+  it('ignores misses, which have no meaningful error', () => {
+    expect(meanDeltaMs(play([['GOOD', 40], ['MISS', 0]]))).toBeCloseTo(40);
+  });
+});
+
+describe('suggestedOffsetMs', () => {
+  it('suggests nothing from too few hits', () => {
+    expect(suggestedOffsetMs(play([['GOOD', 60], ['GOOD', 60]]), 0)).toBeNull();
+  });
+
+  it('suggests nothing when the player is already centred', () => {
+    expect(suggestedOffsetMs(play(Array(12).fill(['PERFECT', 4])), 0)).toBeNull();
+  });
+
+  it('cancels a consistent lateness', () => {
+    // Consistently 60 ms late means the game should judge 60 ms earlier.
+    expect(suggestedOffsetMs(play(Array(12).fill(['GOOD', 60])), 0)).toBe(-60);
+  });
+
+  it('adjusts relative to the offset already in use', () => {
+    expect(suggestedOffsetMs(play(Array(12).fill(['GOOD', 60])), 20)).toBe(-40);
+  });
+
+  it('rounds to something a slider can express', () => {
+    const suggestion = suggestedOffsetMs(play(Array(12).fill(['GOOD', 37])), 0)!;
+    // Math.abs, because a negative multiple of five gives -0 in JavaScript and
+    // Object.is(-0, 0) is false.
+    expect(Math.abs(suggestion % 5)).toBe(0);
+    expect(suggestion).toBe(-35);
   });
 });

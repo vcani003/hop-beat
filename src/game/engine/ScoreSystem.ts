@@ -26,8 +26,17 @@ export interface ScoreState {
   combo: number;
   maxCombo: number;
   counts: Record<Judgment, number>;
-  /** Sum of |error| over judged hits, for the results screen. */
+  /** Sum of |error| over judged hits — how tight the player is. */
   totalAbsDeltaMs: number;
+  /**
+   * Sum of SIGNED error over judged hits — which way they are off.
+   *
+   * The two answer different questions and both are needed. A player who is
+   * 60 ms early half the time and 60 ms late the other half has the same mean
+   * absolute error as one who is 60 ms late every single time, but only the
+   * second has a calibration problem the offset slider can fix.
+   */
+  totalDeltaMs: number;
   judgedCount: number;
 }
 
@@ -38,6 +47,7 @@ export function initialScoreState(): ScoreState {
     maxCombo: 0,
     counts: { PERFECT: 0, GOOD: 0, MISS: 0 },
     totalAbsDeltaMs: 0,
+    totalDeltaMs: 0,
     judgedCount: 0,
   };
 }
@@ -50,10 +60,14 @@ export function comboMultiplier(combo: number): number {
  * Apply one judgment. Returns a NEW state — the engine keeps this outside
  * React, but immutability keeps the reducer trivially testable.
  */
+/**
+ * @param deltaMs SIGNED timing error: negative early, positive late. Ignored
+ *   for a MISS, which has no meaningful error.
+ */
 export function applyJudgment(
   state: ScoreState,
   judgment: Judgment,
-  absDeltaMs: number,
+  deltaMs: number,
 ): ScoreState {
   const isHit = judgment !== 'MISS';
   // The multiplier is read from the combo BEFORE this note extends it, so the
@@ -67,7 +81,8 @@ export function applyJudgment(
     combo,
     maxCombo: Math.max(state.maxCombo, combo),
     counts: { ...state.counts, [judgment]: state.counts[judgment] + 1 },
-    totalAbsDeltaMs: isHit ? state.totalAbsDeltaMs + absDeltaMs : state.totalAbsDeltaMs,
+    totalAbsDeltaMs: isHit ? state.totalAbsDeltaMs + Math.abs(deltaMs) : state.totalAbsDeltaMs,
+    totalDeltaMs: isHit ? state.totalDeltaMs + deltaMs : state.totalDeltaMs,
     judgedCount: state.judgedCount + 1,
   };
 }
@@ -84,6 +99,27 @@ export function accuracy(state: ScoreState): number {
 export function meanAbsDeltaMs(state: ScoreState): number | null {
   const hits = state.counts.PERFECT + state.counts.GOOD;
   return hits === 0 ? null : state.totalAbsDeltaMs / hits;
+}
+
+/**
+ * Mean SIGNED timing error. Negative means consistently early, positive means
+ * consistently late — the number the calibration offset should cancel.
+ */
+export function meanDeltaMs(state: ScoreState): number | null {
+  const hits = state.counts.PERFECT + state.counts.GOOD;
+  return hits === 0 ? null : state.totalDeltaMs / hits;
+}
+
+/**
+ * The offset that would centre the player's hits, or null when there is not
+ * enough evidence yet. Suggesting a correction from three notes would chase
+ * noise.
+ */
+export function suggestedOffsetMs(state: ScoreState, currentOffsetMs: number): number | null {
+  const hits = state.counts.PERFECT + state.counts.GOOD;
+  const mean = meanDeltaMs(state);
+  if (hits < 8 || mean === null || Math.abs(mean) < 12) return null;
+  return Math.round((currentOffsetMs - mean) / 5) * 5;
 }
 
 export type Grade = 'S' | 'A' | 'B' | 'C' | 'D';

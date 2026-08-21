@@ -137,7 +137,7 @@ export class GameEngine {
 
       claimed.judgment = judgment;
       claimed.deltaMs = deltaMs;
-      this.score = applyJudgment(this.score, judgment, Math.abs(deltaMs));
+      this.score = applyJudgment(this.score, judgment, deltaMs);
 
       judged.push({
         noteId: claimed.note.id,

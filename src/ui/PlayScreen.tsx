@@ -19,7 +19,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameClock } from '../game/engine/GameClock.ts';
 import { GameEngine, type JudgmentEvent } from '../game/engine/GameEngine.ts';
 import { DEFAULT_WINDOWS } from '../game/engine/NoteJudge.ts';
-import { accuracy, grade, initialScoreState, meanAbsDeltaMs, type ScoreState } from '../game/engine/ScoreSystem.ts';
+import {
+  accuracy,
+  grade,
+  initialScoreState,
+  meanAbsDeltaMs,
+  meanDeltaMs,
+  suggestedOffsetMs,
+  type ScoreState,
+} from '../game/engine/ScoreSystem.ts';
 import { beatmapDurationMs, type Beatmap } from '../game/maps/schema.ts';
 import { chartForTrack, LOCAL_TRACKS, WARMUP_MAP, type LocalTrack } from '../game/maps/library.ts';
 import { ClickTrackAdapter } from '../playback/ClickTrackAdapter.ts';
@@ -576,7 +584,13 @@ export default function PlayScreen() {
 
         {live && (
           <>
-            <div className="row"><span className="row__label">mean error</span>
+            <div className="row"><span className="row__label">timing bias</span>
+              <span className="row__value mono">
+                {meanDeltaMs(score) === null
+                  ? '—'
+                  : `${meanDeltaMs(score)! > 0 ? '+' : ''}${meanDeltaMs(score)!.toFixed(0)} ms ${meanDeltaMs(score)! > 0 ? 'late' : 'early'}`}
+              </span></div>
+            <div className="row"><span className="row__label">spread</span>
               <span className="row__value mono">{meanAbsDeltaMs(score) === null ? '—' : `${meanAbsDeltaMs(score)!.toFixed(0)} ms`}</span></div>
             <div className="row"><span className="row__label">clock drift</span>
               <span className="row__value mono">{hud.driftMs.toFixed(1)} ms</span></div>
@@ -587,9 +601,26 @@ export default function PlayScreen() {
           </>
         )}
 
+        {(() => {
+          const suggestion = suggestedOffsetMs(score, settings.audioOffsetMs);
+          if (suggestion === null || suggestion === settings.audioOffsetMs) return null;
+          return (
+            <button
+              style={{ marginTop: 10 }}
+              onClick={() => {
+                setSettings((s) => ({ ...s, audioOffsetMs: suggestion }));
+                clockRef.current?.setOffsetMs(suggestion);
+              }}
+            >
+              Set offset to {suggestion > 0 ? '+' : ''}{suggestion} ms
+            </button>
+          );
+        })()}
+
         <p className="hint" style={{ marginTop: 12 }}>
-          Mean error is the tuning signal: a consistent sign means the offset is wrong, a
-          large spread means the windows are too tight.
+          <strong>Bias</strong> is which way you are off, and the offset slider cancels
+          it. <strong>Spread</strong> is how tight you are — a large spread with a small
+          bias means the windows are hard, not miscalibrated.
         </p>
 
         <h2 className="panel__heading" style={{ marginTop: 18 }}>Field</h2>

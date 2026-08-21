@@ -727,3 +727,31 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   margin-top: 0.7rem;
 }
 .calbuttons button { padding: 8px; }
+
+.play__guidance {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0;
+  line-height: 1.4;
+}
+
+.calbuttons--two { grid-template-columns: 2fr 1fr; }
+
+/* Reach meter: how much of what the targets demand the player can cover. */
+.reachbar {
+  position: relative;
+  height: 6px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  margin-top: 0.6rem;
+}
+.reachbar__fill { height: 100%; border-radius: 100px; }
+.reachbar__mark {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: calc(100% - 1px);
+  width: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}

@@ -294,9 +294,11 @@ export const DECISIONS: DecisionEntry[] = [
   },
   {
     number: 14,
-    title: 'The play field is fitted to the player before each song',
+    title: 'The player is guided into position; the targets never move',
     summary:
-      'Screen-anchored targets assume the player\u2019s reach covers the frame, and it does not — an unreachable corner reads as a tracking failure when nothing is wrong. Zones are placed inside a box derived from shoulder width, then frozen for the song.',
+      'Targets stay at fixed screen coordinates so they can be learned, so a chart\u2019s difficulty means something, and so two people can compare scores. Calibration tells the player where to stand instead — reach in screen space depends on distance from the camera, so an unreachable corner is solved by stepping closer.',
+    corrects:
+      'an earlier version that fitted the targets to the player, which spec §3 rules out',
   },
 ];
 

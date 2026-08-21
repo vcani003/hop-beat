@@ -35,14 +35,8 @@ import { LocalAudioAdapter } from '../playback/LocalAudioAdapter.ts';
 import type { PlaybackAdapter } from '../playback/PlaybackAdapter.ts';
 import { GameRenderer } from '../render/pixi/GameRenderer.ts';
 import { scaledZones, usePosePipeline } from '../pose/usePosePipeline.ts';
-import {
-  applyCalibration,
-  calibrationFromPose,
-  describeCalibration,
-  type FieldCalibration,
-} from '../game/calibration.ts';
+import { checkPosition, type PositionCheck } from '../game/positioning.ts';
 import type { Zone } from '../game/zones.ts';
-import type { PoseSnapshot } from '../pose/poseTypes.ts';
 import { loadSettings, saveSettings } from './settingsStorage.ts';
 import { navigate } from './useHashRoute.ts';
 import type { Settings } from './types.ts';
@@ -56,13 +50,8 @@ import type { ZoneEvent } from '../game/ZoneTracker.ts';
  */
 type Phase = 'intro' | 'arming' | 'calibrating' | 'menu' | 'playing' | 'paused' | 'results';
 
-/**
- * How long a single measurement watches the player. About a second at 30 Hz.
- *
- * Long enough for medians to reject a bad frame, short enough that nobody has
- * to hold still for it.
- */
-const MEASURE_MS = 1100;
+/** How often the positioning guide refreshes. Fast enough to feel responsive. */
+const POSITION_CHECK_MS = 150;
 
 /** Published to React at 5 Hz. The hot loop never touches this. */
 interface HudView {
@@ -109,21 +98,28 @@ export default function PlayScreen() {
   // Declared before the callbacks that read it, and before the pose hook that
   // is handed it — ordering here is load-bearing, not stylistic.
   const stageRef = useRef<HTMLDivElement>(null);
-  const zonesRef = useRef<Zone[]>(scaledZones(settings.zoneScale));
-  /** The committed fit. Only ever changes when the player confirms one. */
-  const calibrationRef = useRef<FieldCalibration | null>(null);
-  /** The provisional fit shown while the player positions themselves. */
-  const previewRef = useRef<FieldCalibration | null>(null);
-  const calibrationSamplesRef = useRef<PoseSnapshot[]>([]);
-  const collectingRef = useRef(false);
+
   /**
-   * Where a measurement is up to. A preview only ever appears at the END of
-   * one, and then stays put — targets must never drift on their own, which is
-   * the whole point of anchoring them to the screen (spec §3).
+   * The four targets, at FIXED screen positions. Spec §3: the player moves
+   * into them, never the other way round. Nothing here may relocate them —
+   * only the size setting changes their geometry.
    */
-  const [measureState, setMeasureState] = useState<'measuring' | 'ready' | 'failed'>('measuring');
-  const [previewLabel, setPreviewLabel] = useState<string | null>(null);
-  const [calibrationLabel, setCalibrationLabel] = useState<string>(describeCalibration(null));
+  const zonesRef = useRef<Zone[]>(scaledZones(settings.zoneScale));
+  useEffect(() => {
+    zonesRef.current = scaledZones(settings.zoneScale);
+  }, [settings.zoneScale]);
+
+  /**
+   * Live advice while the player finds a spot they can play from.
+   *
+   * Mirrored into a ref as well: the render loop needs it every frame and must
+   * not read React state from inside requestAnimationFrame.
+   */
+  const [position, setPosition] = useState<PositionCheck | null>(null);
+  const positionRef = useRef<PositionCheck | null>(null);
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
 
   /**
    * Aspect of the play field. Measured from the stage, which is what the Pixi
@@ -133,18 +129,6 @@ export default function PlayScreen() {
     const stage = stageRef.current;
     return stage && stage.clientHeight > 0 ? stage.clientWidth / stage.clientHeight : 16 / 9;
   }, []);
-
-  /** Re-derive the zone layout whenever the size setting or the fit changes. */
-  const rebuildZones = useCallback(() => {
-    zonesRef.current = applyCalibration(
-      scaledZones(settings.zoneScale),
-      calibrationRef.current,
-    );
-  }, [settings.zoneScale]);
-
-  useEffect(() => {
-    rebuildZones();
-  }, [rebuildZones]);
 
   const rendererRef = useRef<GameRenderer | null>(null);
   const adapterRef = useRef<PlaybackAdapter | null>(null);
@@ -178,13 +162,7 @@ export default function PlayScreen() {
 
   /** The pose pipeline calls this on every frame it produces. */
   const onPoseFrame = useCallback(
-    (events: readonly ZoneEvent[], frame: { snapshot: PoseSnapshot; detected: boolean }) => {
-      // Collect only. Nothing is drawn from these until the measurement ends,
-      // so the outlines on screen never move while the player is looking at
-      // them.
-      if (collectingRef.current && frame.detected) {
-        calibrationSamplesRef.current.push(frame.snapshot);
-      }
+    (events: readonly ZoneEvent[]) => {
       const engine = engineRef.current;
       if (!engine || phaseRef.current !== 'playing' || events.length === 0) return;
       presentJudgments(engine.handleZoneEvents(events));
@@ -249,7 +227,8 @@ export default function PlayScreen() {
       if (renderer) {
         renderer.render({
           zones: zonesRef.current,
-          zonesArePreview: phaseRef.current === 'calibrating',
+          unreachableZones:
+            phaseRef.current === 'calibrating' ? (positionRef.current?.unreachable ?? []) : [],
           notes: engine ? engine.getNotes() : [],
           playbackTimeMs: clock ? clock.rawTimeMs() : 0,
           snapshot: snapshotRef.current,
@@ -345,62 +324,28 @@ export default function PlayScreen() {
    * a corner can simply be outside the player's arms, which reads as the
    * tracker failing when nothing is wrong with it.
    */
-  /**
-   * Take ONE measurement, then stop.
-   *
-   * An earlier version re-fitted continuously so the player could watch the
-   * targets track them. That was a mistake twice over: it contradicts spec §3,
-   * which anchors targets to the screen precisely so they can be learned, and
-   * in practice it just reads as the game being unable to keep still.
-   *
-   * So a measurement is a discrete event with a beginning and an end. When it
-   * finishes the outlines appear and do not move again — not until the player
-   * asks for another one.
-   */
-  const measure = useCallback(async () => {
-    calibrationSamplesRef.current = [];
-    previewRef.current = null;
-    setPreviewLabel(null);
-    setMeasureState('measuring');
-    collectingRef.current = true;
-
-    await new Promise((resolve) => setTimeout(resolve, MEASURE_MS));
-    collectingRef.current = false;
-
-    const fitted = calibrationFromPose(calibrationSamplesRef.current, fieldAspect());
-    if (!fitted) {
-      setMeasureState('failed');
-      return;
-    }
-
-    previewRef.current = fitted;
-    zonesRef.current = applyCalibration(scaledZones(settingsRef.current.zoneScale), fitted);
-    setPreviewLabel(describeCalibration(fitted));
-    setMeasureState('ready');
-  }, [fieldAspect]);
-
-  /** Open the fitting step and take a first measurement. */
-  const startFitting = useCallback(() => {
+  /** Open the positioning step. The targets do not change; the advice does. */
+  const startPositioning = useCallback(() => {
     setPhase('calibrating');
-    void measure();
-  }, [measure]);
+  }, []);
 
-  /** Commit the measured fit. From here the targets are fixed. */
-  const lockFit = useCallback(() => {
-    collectingRef.current = false;
-    if (previewRef.current) calibrationRef.current = previewRef.current;
-    setCalibrationLabel(describeCalibration(calibrationRef.current));
-    rebuildZones();
+  const donePositioning = useCallback(() => {
     setPhase('menu');
-  }, [rebuildZones]);
+  }, []);
 
-  /** Abandon the preview and put the previously committed layout back. */
-  const cancelFit = useCallback(() => {
-    collectingRef.current = false;
-    previewRef.current = null;
-    rebuildZones();
-    setPhase('menu');
-  }, [rebuildZones]);
+  /**
+   * Advise the player while they find a spot.
+   *
+   * This only ever READS the pose and the fixed zones. It has no way to move a
+   * target even if it wanted to, which is the guarantee that matters here.
+   */
+  useEffect(() => {
+    if (phase !== 'calibrating') return;
+    const id = window.setInterval(() => {
+      setPosition(checkPosition(snapshotRef.current, zonesRef.current, fieldAspect()));
+    }, POSITION_CHECK_MS);
+    return () => window.clearInterval(id);
+  }, [phase, fieldAspect, snapshotRef]);
 
   /** One-time setup: camera, then let the player position and confirm. */
   const setUp = useCallback(async () => {
@@ -410,8 +355,8 @@ export default function PlayScreen() {
       setPhase('intro');
       return;
     }
-    startFitting();
-  }, [pose, startFitting]);
+    startPositioning();
+  }, [pose, startPositioning]);
 
   const pause = useCallback(() => {
     adapterRef.current?.pause();
@@ -526,43 +471,47 @@ export default function PlayScreen() {
         */}
         {phase === 'calibrating' && (
           <div className="play__calibrating">
-            <h2>Where should the targets go?</h2>
+            <h2>Find your spot</h2>
+            <p className="play__hint">
+              The four targets are fixed — they are in the same place every game. Move
+              yourself until you can reach all of them.
+            </p>
 
-            {measureState === 'measuring' && (
-              <p className="play__hint" style={{ color: 'var(--gold)' }}>
-                Measuring — stand where you want to play…
+            <p
+              className="play__guidance"
+              style={{ color: position?.ok ? 'var(--good)' : 'var(--gold)' }}
+            >
+              {position?.guidance ?? 'Looking for you…'}
+            </p>
+
+            {position && position.centre && (
+              <div className="reachbar">
+                <div
+                  className="reachbar__fill"
+                  style={{
+                    width: `${Math.min(100, position.reachRatio * 100)}%`,
+                    background: position.ok ? 'var(--good)' : 'var(--gold)',
+                  }}
+                />
+                <span className="reachbar__mark" />
+              </div>
+            )}
+
+            {position && position.unreachable.length > 0 && (
+              <p className="play__hint" style={{ fontSize: '0.72rem' }}>
+                Out of reach: {position.unreachable.length} of 4
               </p>
             )}
 
-            {measureState === 'failed' && (
-              <p className="play__hint" style={{ color: 'var(--bad)' }}>
-                Could not see your shoulders. Step back until your upper body is in
-                frame, then measure again.
-              </p>
-            )}
-
-            {measureState === 'ready' && (
-              <>
-                <p className="play__hint">
-                  These are fixed. Move around and check you can reach all four — if not,
-                  reposition and measure again.
-                </p>
-                <p className="play__hint" style={{ color: 'var(--good)' }}>{previewLabel}</p>
-              </>
-            )}
-
-            <div className="calbuttons">
+            <div className="calbuttons calbuttons--two">
               <button
                 className="button--primary"
-                onClick={lockFit}
-                disabled={measureState !== 'ready'}
+                onClick={donePositioning}
+                disabled={!position?.ok}
               >
-                Lock targets here
+                I'm in position
               </button>
-              <button onClick={() => void measure()} disabled={measureState === 'measuring'}>
-                Measure again
-              </button>
-              <button onClick={cancelFit}>Cancel</button>
+              <button onClick={donePositioning}>Skip</button>
             </div>
           </div>
         )}
@@ -671,9 +620,11 @@ export default function PlayScreen() {
               </button>
 
               <div className="menufit">
-                <span className="menufit__label">{calibrationLabel}</span>
-                <button className="button--quiet" onClick={startFitting}>
-                  Re-fit
+                <span className="menufit__label">
+                  Targets are fixed. Check you can reach all four before you start.
+                </span>
+                <button className="button--quiet" onClick={startPositioning}>
+                  Check position
                 </button>
               </div>
 
@@ -819,18 +770,16 @@ export default function PlayScreen() {
           mirror
         </label>
 
-        <h2 className="panel__heading" style={{ marginTop: 18 }}>Field</h2>
-        <p className="hint">{calibrationLabel}</p>
+        <h2 className="panel__heading" style={{ marginTop: 18 }}>Position</h2>
         <button
-          style={{ marginTop: 8 }}
           disabled={pose.status !== 'running' || phase === 'calibrating' || phase === 'playing'}
-          onClick={startFitting}
+          onClick={startPositioning}
         >
-          Re-fit to me
+          Check my position
         </button>
         <p className="hint" style={{ marginTop: 8 }}>
-          If a corner is hard to reach, move to where you want to stand and re-fit.
-          Targets stay put while a song plays — only this decides where they sit.
+          The targets never move. If a corner is out of reach, step closer to the
+          camera — distance is what decides how much of the frame your arms cover.
         </p>
       </aside>
     </div>

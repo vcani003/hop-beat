@@ -260,26 +260,44 @@ The bookkeeping that decides whether one approach is still under way stays on
 the CURRENT point. Using the swept answer there would keep an approach alive
 while the hand withdrew back through the zone, and count two attempts as one.
 
-### 14. The play field is fitted to the player before each song
+### 14. The player is guided into position; the targets never move
+
+**This reverses an earlier decision, which was wrong.**
 
 Reported symptom: *"even though I'm far back enough I have trouble hitting the
-bottom right"*.
+bottom right"*. The diagnosis was right — the target really was outside her
+reach — and the fix was backwards. I made the four targets fit themselves to
+whoever was standing there.
 
-Spec §3 anchors targets to stable normalised screen coordinates, which is right
-— a target that moves is a target you cannot learn. But it assumes the player's
-reach covers the frame, and where you stand, how tall you are and how wide the
-lens is all decide whether it does. An unreachable corner reads as the tracker
-failing when nothing is wrong with it.
+Spec §3 says the opposite, in as many words: *"Screen-anchored targets. Targets
+belong to stable normalized screen coordinates. **The player moves into
+them.**"* Three rounds of feedback followed, ending in the plainest possible
+statement of it: *"the targets should always have a fixed position on the
+screen, the user should calibrate themselves for the target position, not the
+other way around."*
 
-Before each song the player is watched for 1.6 s and the four zones are placed
-inside a box derived from **shoulder width**, which is a reliable proxy for arm
-length and needs no reach test. The fit is then frozen, so targets remain
-screen-anchored while playing.
+Body-fitted targets fail for reasons well past tidiness:
 
-Medians, not means: one frame with a misplaced shoulder would otherwise drag
-the whole field.
+- **They cannot be learned.** Muscle memory is most of what a rhythm game
+  trades in, and it needs the upper-left target to be where it was yesterday.
+- **Difficulty stops meaning anything.** The distance between two notes — and
+  therefore whether a pattern is playable at tempo — would depend on who is
+  playing.
+- **Two people cannot compare scores** on the same chart.
 
-This replaces the "calibration placeholder" §15 asks for with the real thing.
+So the targets are fixed, and calibration answers a different question: from
+where the player is standing, can they reach them, and if not, what should they
+do about it?
+
+The physical insight that makes the advice possible is that reach in SCREEN
+space depends on distance from the camera. Stand close and your arms span most
+of the frame; stand far and they span very little. So an unreachable corner is
+almost always solved by stepping closer, and a body cropped out of frame by
+stepping back. `positioning.ts` finds that sweet spot and says which way to
+move; unreachable targets are marked in red where they already are.
+
+The module has no way to relocate a target even in principle — it only reads
+them — which is the property worth having.
 
 ---
 

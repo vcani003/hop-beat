@@ -52,12 +52,11 @@ interface Ripple {
 export interface RenderState {
   zones: readonly Zone[];
   /**
-   * True while the zones shown are a PROVISIONAL fit that is still following
-   * the player. Drawn differently on purpose: targets that move are a
-   * contradiction of how this game works (spec §3 anchors them to the screen),
-   * so the one moment they do move must not look like normal play.
+   * Zone ids the player cannot currently reach, shown while they are finding a
+   * spot. The targets do not move — this only marks which ones are a problem
+   * from where they are standing.
    */
-  zonesArePreview?: boolean;
+  unreachableZones?: readonly string[];
   notes: readonly ActiveNote[];
   playbackTimeMs: number;
   snapshot: PoseSnapshot | null;
@@ -163,12 +162,12 @@ export class GameRenderer {
       const r = this.radiusPx(zone);
       const colour = ZONE_COLOUR[zone.id] ?? 0xffffff;
 
-      if (state.zonesArePreview) {
-        // Hollow, faint, and ringed by a wider halo — legible as "this is
-        // where they WOULD go", not as a target to hit.
-        g.circle(cx, cy, r).stroke({ width: 2, color: colour, alpha: 0.5 });
-        g.circle(cx, cy, r * 1.25).stroke({ width: 1, color: colour, alpha: 0.18 });
-        g.circle(cx, cy, 2).fill({ color: colour, alpha: 0.5 });
+      // Out of reach from where the player is standing. The target stays
+      // exactly where it is — only its appearance says "not from there".
+      if (state.unreachableZones?.includes(zone.id)) {
+        g.circle(cx, cy, r).fill({ color: 0xf87171, alpha: 0.06 });
+        g.circle(cx, cy, r).stroke({ width: 2, color: 0xf87171, alpha: 0.7 });
+        g.circle(cx, cy, 3).fill({ color: 0xf87171, alpha: 0.8 });
         continue;
       }
 

@@ -722,7 +722,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .calbuttons {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 2fr 1.3fr 1fr;
   gap: 6px;
   margin-top: 0.7rem;
 }

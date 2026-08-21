@@ -57,14 +57,12 @@ import type { ZoneEvent } from '../game/ZoneTracker.ts';
 type Phase = 'intro' | 'arming' | 'calibrating' | 'menu' | 'playing' | 'paused' | 'results';
 
 /**
- * Samples kept while previewing a fit. About a second and a half at 30 Hz.
+ * How long a single measurement watches the player. About a second at 30 Hz.
  *
- * A rolling window rather than everything since the step began: the preview
- * should describe where the player is NOW, so that stepping back visibly
- * changes it. Averaging over the whole session would make the preview
- * increasingly deaf to them moving.
+ * Long enough for medians to reject a bad frame, short enough that nobody has
+ * to hold still for it.
  */
-const CALIBRATION_WINDOW = 45;
+const MEASURE_MS = 1100;
 
 /** Published to React at 5 Hz. The hot loop never touches this. */
 interface HudView {
@@ -118,8 +116,12 @@ export default function PlayScreen() {
   const previewRef = useRef<FieldCalibration | null>(null);
   const calibrationSamplesRef = useRef<PoseSnapshot[]>([]);
   const collectingRef = useRef(false);
-  const previewReadyRef = useRef(false);
-  const [previewReady, setPreviewReady] = useState(false);
+  /**
+   * Where a measurement is up to. A preview only ever appears at the END of
+   * one, and then stays put — targets must never drift on their own, which is
+   * the whole point of anchoring them to the screen (spec §3).
+   */
+  const [measureState, setMeasureState] = useState<'measuring' | 'ready' | 'failed'>('measuring');
   const [previewLabel, setPreviewLabel] = useState<string | null>(null);
   const [calibrationLabel, setCalibrationLabel] = useState<string>(describeCalibration(null));
 
@@ -177,31 +179,17 @@ export default function PlayScreen() {
   /** The pose pipeline calls this on every frame it produces. */
   const onPoseFrame = useCallback(
     (events: readonly ZoneEvent[], frame: { snapshot: PoseSnapshot; detected: boolean }) => {
+      // Collect only. Nothing is drawn from these until the measurement ends,
+      // so the outlines on screen never move while the player is looking at
+      // them.
       if (collectingRef.current && frame.detected) {
-        const samples = calibrationSamplesRef.current;
-        samples.push(frame.snapshot);
-        if (samples.length > CALIBRATION_WINDOW) samples.shift();
-
-        // Update the PREVIEW only. The committed fit is untouched until the
-        // player confirms, so nothing they are playing against can move.
-        if (samples.length % 5 === 0) {
-          const live = calibrationFromPose(samples, fieldAspect());
-          if (live) {
-            previewRef.current = live;
-            zonesRef.current = applyCalibration(scaledZones(settingsRef.current.zoneScale), live);
-            setPreviewLabel(describeCalibration(live));
-            if (!previewReadyRef.current) {
-              previewReadyRef.current = true;
-              setPreviewReady(true);
-            }
-          }
-        }
+        calibrationSamplesRef.current.push(frame.snapshot);
       }
       const engine = engineRef.current;
       if (!engine || phaseRef.current !== 'playing' || events.length === 0) return;
       presentJudgments(engine.handleZoneEvents(events));
     },
-    [presentJudgments, fieldAspect],
+    [presentJudgments],
   );
 
   const pose = usePosePipeline(settings, zonesRef, fieldAspect, onPoseFrame);
@@ -358,24 +346,46 @@ export default function PlayScreen() {
    * tracker failing when nothing is wrong with it.
    */
   /**
-   * Begin previewing a fit. Does NOT end on its own.
+   * Take ONE measurement, then stop.
    *
-   * A timer was the wrong shape for this: it finished while the player was
-   * still deciding whether they liked where they stood, which reads as the
-   * step ending at random. Confirmation is the player's, so the moment the
-   * targets stop moving is theirs too.
+   * An earlier version re-fitted continuously so the player could watch the
+   * targets track them. That was a mistake twice over: it contradicts spec §3,
+   * which anchors targets to the screen precisely so they can be learned, and
+   * in practice it just reads as the game being unable to keep still.
+   *
+   * So a measurement is a discrete event with a beginning and an end. When it
+   * finishes the outlines appear and do not move again — not until the player
+   * asks for another one.
    */
-  const startFitting = useCallback(() => {
+  const measure = useCallback(async () => {
     calibrationSamplesRef.current = [];
     previewRef.current = null;
-    previewReadyRef.current = false;
-    setPreviewReady(false);
     setPreviewLabel(null);
+    setMeasureState('measuring');
     collectingRef.current = true;
-    setPhase('calibrating');
-  }, []);
 
-  /** Commit the previewed fit. From here the targets are fixed. */
+    await new Promise((resolve) => setTimeout(resolve, MEASURE_MS));
+    collectingRef.current = false;
+
+    const fitted = calibrationFromPose(calibrationSamplesRef.current, fieldAspect());
+    if (!fitted) {
+      setMeasureState('failed');
+      return;
+    }
+
+    previewRef.current = fitted;
+    zonesRef.current = applyCalibration(scaledZones(settingsRef.current.zoneScale), fitted);
+    setPreviewLabel(describeCalibration(fitted));
+    setMeasureState('ready');
+  }, [fieldAspect]);
+
+  /** Open the fitting step and take a first measurement. */
+  const startFitting = useCallback(() => {
+    setPhase('calibrating');
+    void measure();
+  }, [measure]);
+
+  /** Commit the measured fit. From here the targets are fixed. */
   const lockFit = useCallback(() => {
     collectingRef.current = false;
     if (previewRef.current) calibrationRef.current = previewRef.current;
@@ -517,18 +527,40 @@ export default function PlayScreen() {
         {phase === 'calibrating' && (
           <div className="play__calibrating">
             <h2>Where should the targets go?</h2>
-            <p className="play__hint">
-              Stand where you want to play. The outlines follow you so you can see the
-              fit — they stop moving the moment you lock them in.
-            </p>
-            <p className="play__hint" style={{ color: previewReady ? 'var(--good)' : 'var(--gold)' }}>
-              {previewReady && previewLabel
-                ? previewLabel
-                : 'Looking for your shoulders — step back until your upper body is in frame.'}
-            </p>
+
+            {measureState === 'measuring' && (
+              <p className="play__hint" style={{ color: 'var(--gold)' }}>
+                Measuring — stand where you want to play…
+              </p>
+            )}
+
+            {measureState === 'failed' && (
+              <p className="play__hint" style={{ color: 'var(--bad)' }}>
+                Could not see your shoulders. Step back until your upper body is in
+                frame, then measure again.
+              </p>
+            )}
+
+            {measureState === 'ready' && (
+              <>
+                <p className="play__hint">
+                  These are fixed. Move around and check you can reach all four — if not,
+                  reposition and measure again.
+                </p>
+                <p className="play__hint" style={{ color: 'var(--good)' }}>{previewLabel}</p>
+              </>
+            )}
+
             <div className="calbuttons">
-              <button className="button--primary" onClick={lockFit} disabled={!previewReady}>
+              <button
+                className="button--primary"
+                onClick={lockFit}
+                disabled={measureState !== 'ready'}
+              >
                 Lock targets here
+              </button>
+              <button onClick={() => void measure()} disabled={measureState === 'measuring'}>
+                Measure again
               </button>
               <button onClick={cancelFit}>Cancel</button>
             </div>

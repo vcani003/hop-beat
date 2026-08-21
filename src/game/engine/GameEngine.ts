@@ -137,7 +137,7 @@ export class GameEngine {
 
       claimed.judgment = judgment;
       claimed.deltaMs = deltaMs;
-      this.score = applyJudgment(this.score, judgment, deltaMs);
+      this.score = applyJudgment(this.score, judgment, deltaMs, inputTimeMs);
 
       judged.push({
         noteId: claimed.note.id,
@@ -168,7 +168,7 @@ export class GameEngine {
     const judged: JudgmentEvent[] = [];
     for (const active of expired) {
       active.judgment = 'MISS';
-      this.score = applyJudgment(this.score, 'MISS', 0);
+      this.score = applyJudgment(this.score, 'MISS', 0, playbackTimeMs);
       judged.push({
         noteId: active.note.id,
         zone: active.note.zone,

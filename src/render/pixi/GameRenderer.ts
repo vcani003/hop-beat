@@ -269,6 +269,26 @@ export class GameRenderer {
     }
   }
 
+  /**
+   * Feedback for a strike that hit no note.
+   *
+   * Without this, a detected strike with nothing to claim looks exactly like a
+   * hand the camera never saw — both produce silence. Those are completely
+   * different problems ("my timing is off" versus "it can't see me") and a
+   * player cannot tell them apart without being shown.
+   *
+   * Deliberately quiet and colourless: it acknowledges the input without
+   * pretending anything was scored.
+   */
+  showStrike(zone: Zone | undefined, nowMs: number): void {
+    if (!this.app || !zone) return;
+    const graphic = new Graphics();
+    graphic.position.set(zone.cx * this.width, zone.cy * this.height);
+    (graphic as Graphics & { baseRadius?: number }).baseRadius = this.radiusPx(zone) * 0.6;
+    this.effectLayer.addChild(graphic);
+    this.ripples.push({ graphic, bornAt: nowMs, colour: 0xffffff });
+  }
+
   /** Fire the feedback for one judgment. Called from the engine's output. */
   showJudgment(judgment: Judgment, zone: Zone | undefined, nowMs: number): void {
     if (!this.app || !zone) return;

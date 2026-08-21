@@ -64,6 +64,9 @@ export interface ZoneTrackerConfig {
   /**
    * Ignore a previous sample older than this when sweeping. A stale sample
    * would describe a path the hand did not take in one motion.
+   *
+   * Generous enough to span a few frames the model was unsure about, because
+   * those frames are precisely the ones a fast hand produces.
    */
   maxSweepGapMs: number;
 }
@@ -82,7 +85,7 @@ export const DEFAULT_TRACKER_CONFIG: ZoneTrackerConfig = {
   refractoryMs: 0,
   requireInFrame: true,
   sweptCollision: true,
-  maxSweepGapMs: 120,
+  maxSweepGapMs: 250,
 };
 
 /**
@@ -347,14 +350,22 @@ export class ZoneTracker {
       }
     }
 
-    // Remember trusted positions only. Sweeping from a position the model was
+    // Remember trusted positions only — sweeping from a position the model was
     // unsure of would invent a path the hand never took.
+    //
+    // But do NOT forget the last trusted one when a frame is untrusted. Motion
+    // blur is what makes a landmark uncertain, and a hand moving fast enough to
+    // blur is exactly the hand that needs sweeping. Discarding the anchor on a
+    // blurry frame disabled the mechanism precisely when it mattered, and left
+    // the NEXT frame with nothing to sweep from either.
+    //
+    // A hand confidently seen at A and confidently seen at C did travel A to C,
+    // whatever the model made of the blur in between. The staleness limit is
+    // what stops that reasoning being stretched too far.
     for (const limb of INPUT_LIMBS) {
       const point = snapshot.landmarks[limb];
       if (this.isTrusted(point)) {
         this.previous.set(limb, { x: point.x, y: point.y, timestampMs: now });
-      } else {
-        this.previous.delete(limb);
       }
     }
 

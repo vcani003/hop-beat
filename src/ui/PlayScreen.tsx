@@ -26,6 +26,7 @@ import {
   meanAbsDeltaMs,
   meanDeltaMs,
   suggestedOffsetMs,
+  timingDiagnosis,
   type ScoreState,
 } from '../game/engine/ScoreSystem.ts';
 import { beatmapDurationMs, type Beatmap } from '../game/maps/schema.ts';
@@ -207,7 +208,24 @@ export default function PlayScreen() {
       }
       const engine = engineRef.current;
       if (!engine || phaseRef.current !== 'playing' || events.length === 0) return;
-      presentJudgments(engine.handleZoneEvents(events));
+
+      const judgments = engine.handleZoneEvents(events);
+      presentJudgments(judgments);
+
+      // Acknowledge strikes that matched no note. Silence would be
+      // indistinguishable from the camera not having seen the hand at all.
+      const claimed = new Set(judgments.map((j) => j.zone));
+      const renderer = rendererRef.current;
+      if (renderer) {
+        const now = performance.now();
+        for (const event of events) {
+          if (event.type !== 'ZONE_ENTER' || claimed.has(event.zoneId)) continue;
+          renderer.showStrike(
+            zonesRef.current.find((z) => z.id === event.zoneId),
+            now,
+          );
+        }
+      }
     },
     [presentJudgments],
   );
@@ -794,6 +812,16 @@ export default function PlayScreen() {
                 </div>
               </div>
 
+              {(() => {
+                const diagnosis = timingDiagnosis(score);
+                if (diagnosis.fault === 'unknown' || diagnosis.fault === 'none') return null;
+                return (
+                  <p className="play__hint" style={{ color: 'var(--gold)' }}>
+                    {diagnosis.explanation}
+                  </p>
+                );
+              })()}
+
               <button className="button--primary" onClick={retry}>Play again</button>
               <button onClick={quit}>Menu</button>
             </div>
@@ -861,6 +889,22 @@ export default function PlayScreen() {
             >
               Set offset to {suggestion > 0 ? '+' : ''}{suggestion} ms
             </button>
+          );
+        })()}
+
+        {(() => {
+          const diagnosis = timingDiagnosis(score);
+          if (diagnosis.fault === 'unknown') return null;
+          const colour =
+            diagnosis.fault === 'tempo'
+              ? 'var(--bad)'
+              : diagnosis.fault === 'offset'
+                ? 'var(--gold)'
+                : 'var(--good)';
+          return (
+            <p className="hint" style={{ marginTop: 10, color: colour, lineHeight: 1.6 }}>
+              {diagnosis.explanation}
+            </p>
           );
         })()}
 

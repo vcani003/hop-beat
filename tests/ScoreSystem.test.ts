@@ -8,6 +8,7 @@ import {
   meanAbsDeltaMs,
   meanDeltaMs,
   suggestedOffsetMs,
+  timingDiagnosis,
 } from '../src/game/engine/ScoreSystem.ts';
 
 const play = (sequence: Array<[('PERFECT' | 'GOOD' | 'MISS'), number]>) =>
@@ -155,5 +156,66 @@ describe('suggestedOffsetMs', () => {
     // Object.is(-0, 0) is false.
     expect(Math.abs(suggestion % 5)).toBe(0);
     expect(suggestion).toBe(-35);
+  });
+});
+
+describe('timingDiagnosis — offset versus tempo', () => {
+  const song = (deltas: number[]) =>
+    deltas.reduce(
+      (state, deltaMs, i) => applyJudgment(state, 'GOOD', deltaMs, i * 1000),
+      initialScoreState(),
+    );
+
+  it('refuses to guess from too few hits', () => {
+    expect(song([50, 50, 50]).samples).toHaveLength(3);
+    expect(timingDiagnosis(song([50, 50, 50])).fault).toBe('unknown');
+  });
+
+  /**
+   * A wrong OFFSET shifts every note by the same amount, so the error is
+   * constant from the first note to the last. The slider cancels it exactly.
+   */
+  it('calls a constant error an offset problem', () => {
+    const result = timingDiagnosis(song(Array(20).fill(60)));
+    expect(result.fault).toBe('offset');
+    expect(result.biasMs).toBeCloseTo(60);
+    expect(Math.abs(result.driftMs)).toBeLessThan(10);
+    expect(result.explanation).toMatch(/offset slider/i);
+  });
+
+  /**
+   * A wrong TEMPO puts the notes on the wrong grid, so the error grows through
+   * the song. No offset fixes that — the BPM has to change.
+   */
+  it('calls a growing error a tempo problem', () => {
+    const drifting = Array.from({ length: 20 }, (_, i) => -60 + i * 8);
+    const result = timingDiagnosis(song(drifting));
+    expect(result.fault).toBe('tempo');
+    expect(result.driftMs).toBeGreaterThan(45);
+    expect(result.explanation).toMatch(/BPM/);
+  });
+
+  it('spots a chart running fast as readily as one running slow', () => {
+    const result = timingDiagnosis(song(Array.from({ length: 20 }, (_, i) => 60 - i * 8)));
+    expect(result.fault).toBe('tempo');
+    expect(result.driftMs).toBeLessThan(-45);
+  });
+
+  /** Drift wins: a chart on the wrong grid also has a bias, and fixing the
+   *  bias would leave it still drifting. */
+  it('reports tempo rather than offset when a chart has both', () => {
+    const both = Array.from({ length: 20 }, (_, i) => 80 + i * 9);
+    expect(timingDiagnosis(song(both)).fault).toBe('tempo');
+  });
+
+  it('is satisfied by steady, well-centred timing', () => {
+    const result = timingDiagnosis(song([5, -8, 3, 10, -5, 2, -3, 7, -6, 4, 1, -2, 6, -4, 0, 8, -7, 3, -1, 5]));
+    expect(result.fault).toBe('none');
+    expect(result.explanation).toMatch(/steady/i);
+  });
+
+  it('does not record a sample for a miss', () => {
+    const state = applyJudgment(applyJudgment(initialScoreState(), 'GOOD', 20, 0), 'MISS', 0, 1000);
+    expect(state.samples).toHaveLength(1);
   });
 });

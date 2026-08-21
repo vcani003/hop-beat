@@ -216,7 +216,7 @@ export default function ControlPanel({ settings, onChange, disabled }: Props) {
         <Toggle label="show camera" checked={settings.showVideo} onChange={(v) => set('showVideo', v)} />
         <Toggle label="show skeleton" checked={settings.showSkeleton} onChange={(v) => set('showSkeleton', v)} />
         <p className="hint">
-          Turn the camera off to check spec open question #10 — whether an abstract
+          Turn the camera off to check spec open question #9 — whether an abstract
           figure is enough to play by.
         </p>
       </div>

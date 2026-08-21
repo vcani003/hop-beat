@@ -27,7 +27,7 @@ export interface Settings {
  * See docs/DECISIONS.md.
  *
  * `showVideo` is off because the skeleton alone turned out to be enough to
- * play by — spec open question #10, answered.
+ * play by — spec open question #9, answered.
  */
 export const DEFAULT_SETTINGS: Settings = {
   modelVariant: 'lite',

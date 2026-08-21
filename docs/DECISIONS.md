@@ -197,7 +197,7 @@ implausible frame timestamps.
 That latency figure is the one MVP 1 inherits: it consumes roughly a third of
 the ±80 ms PERFECT window in spec §7 before any judgment logic runs.
 
-Also answered along the way, spec §20 #10 — *does showing the webcam improve
+Also answered along the way, spec §20 #9 — *does showing the webcam improve
 playability?* No. The skeleton alone is enough to play by, and the camera feed
 is off by default.
 

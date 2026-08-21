@@ -37,6 +37,7 @@ import DebugHud from './ui/DebugHud.tsx';
 import EventLog from './ui/EventLog.tsx';
 import SessionPanel from './ui/SessionPanel.tsx';
 import { loadSettings, saveSettings } from './ui/settingsStorage.ts';
+import { navigate } from './ui/useHashRoute.ts';
 import {
   EMPTY_TELEMETRY,
   type LogEntry,
@@ -459,6 +460,10 @@ export default function App() {
       <div className="panel">
         <button onClick={live ? stop : start} disabled={status === 'loading'}>
           {status === 'loading' ? 'Loading…' : live ? 'Stop' : 'Start camera'}
+        </button>
+
+        <button className="button--quiet" onClick={() => navigate('/spec')}>
+          Spec progress →
         </button>
 
         <DebugHud telemetry={telemetry} live={live} settings={settings} />

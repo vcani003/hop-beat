@@ -58,8 +58,8 @@ modified. See §11 of the spec.
 MVP 0 is the only assignment until it is met and reviewed.
 
 - **MVP 0 — prove the controller.** Webcam, pose landmarks, four zones, reliable
-  wrist-entry events. No music, no scoring, no art. *Built; awaiting real-webcam
-  sign-off against the exit criterion.*
+  wrist-entry events. No music, no scoring, no art. **Done** — exit criterion met
+  on a real webcam; see [`docs/DECISIONS.md`](docs/DECISIONS.md).
 - **MVP 1 — make it a rhythm game.** One track, one hand-authored map,
   authoritative clock, judgment and scoring.
 - **MVP 2 — generate a map.** Offline analysis, then a choreography generator

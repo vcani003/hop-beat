@@ -17,24 +17,29 @@ export interface Settings {
 }
 
 /**
- * Tuned on real hardware rather than chosen on paper.
+ * Tuned on real hardware and confirmed in play, not chosen on paper.
  *
- * Note the strategy this represents: hysteresis is OFF (1.00x) and chatter is
- * suppressed by a re-entry lockout instead. That trade is deliberate and it
- * works — but the lockout is also a hard ceiling on repeat-hit tempo, which is
- * why the HUD now counts the hits it refuses. See docs/DECISIONS.md.
+ * Chatter is suppressed by hysteresis, which constrains how far a wrist must
+ * travel to LEAVE a zone. The re-entry lockout is kept near zero: it
+ * constrains time instead, so every millisecond of it is a millisecond in
+ * which a genuine fast repeat cannot land. An earlier configuration had these
+ * the other way round and silently ate half of all repeat hits above 120 BPM.
+ * See docs/DECISIONS.md.
+ *
+ * `showVideo` is off because the skeleton alone turned out to be enough to
+ * play by — spec open question #10, answered.
  */
 export const DEFAULT_SETTINGS: Settings = {
-  modelVariant: 'full',
+  modelVariant: 'lite',
   delegate: 'CPU',
   mirrored: true,
   showVideo: false,
   showSkeleton: true,
   zoneScale: 0.65,
   minVisibility: 0.4,
-  exitRadiusScale: 1.0,
+  exitRadiusScale: 1.25,
   exitGraceMs: 40,
-  refractoryMs: 360,
+  refractoryMs: 20,
   requireInFrame: true,
 };
 

@@ -128,8 +128,10 @@ not run, so real-world cost will be higher):
 Both fit inside a 33 ms frame budget with room to spare. GPU is faster at
 steady state; CPU initialises faster. SIMD is supported.
 
-**Not yet measured on real hardware with a real person:** end-to-end input
-latency. See "Open after MVP 0" below.
+Note this table was measured with **no person in frame**, so only the detector
+ran. With a person present and the landmark model doing real work, mean
+inference on `full`/CPU measured ~18 ms — still comfortably inside budget. See
+"MVP 0 exit criterion" below for the end-to-end figures.
 
 ### Hysteresis versus refractory, simulated at a 30 Hz pose rate
 
@@ -160,11 +162,49 @@ period should stay near zero and exists only as an escape hatch.** The two are
 not interchangeable, and the earlier framing in decision 4 that treated them as
 parallel options was wrong.
 
+### 10. Model and delegate are interchangeable on this hardware
+
+All four combinations of `lite`/`full` and `GPU`/`CPU` finish well inside the
+33 ms budget set by a 30 fps camera, so none of them is the bottleneck and they
+are perceptually identical in play. Confirmed by the operator: "I think they're
+all about the same."
+
+They are not *equal* — GPU is measurably faster at steady state — but the
+difference lands in slack rather than in latency the player can feel.
+
+**Therefore choose the model for landmark quality, not for speed**, and revisit
+only if a slower machine, a higher-resolution camera, or the `heavy` variant
+pushes inference past the frame budget. `lite` is the current default purely
+because it loads fastest; `full` costs nothing measurable if wrist accuracy in
+fast motion ever proves marginal.
+
+---
+
+## MVP 0 exit criterion
+
+> Move either wrist into each target and receive reliable, low-latency
+> zone-enter events across repeated attempts. — Spec §15
+
+**Met.** Confirmed by the operator in play with the corrected tuning:
+hysteresis `1.25×`, re-entry lockout `20 ms`, exit grace `40 ms`, zone size
+`0.65×`, confidence `0.40`, `lite` on the CPU delegate — "i can rapid fire a lot
+more cleanly."
+
+Measured on the same machine during a healthy session: 30 Hz pose rate, 60 fps
+render, ~18 ms mean inference, ~28 ms end-to-end input latency with no
+implausible frame timestamps.
+
+That latency figure is the one MVP 1 inherits: it consumes roughly a third of
+the ±80 ms PERFECT window in spec §7 before any judgment logic runs.
+
+Also answered along the way, spec §20 #10 — *does showing the webcam improve
+playability?* No. The skeleton alone is enough to play by, and the camera feed
+is off by default.
+
 ---
 
 ## Open after MVP 0
 
-- Real-webcam input latency, with `timestampSuspect` reading 0%.
 - Whether a fast wrist can *tunnel* through a zone entirely between two pose
   frames. At 30 Hz a hand crossing the screen in 0.5 s moves ~0.066 field units
   per frame against a 0.098-unit zone diameter, so this is plausible. The fix

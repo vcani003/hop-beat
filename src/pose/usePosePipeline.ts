@@ -11,11 +11,14 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MediaPipePoseProvider, type PoseFrame } from './MediaPipePoseProvider.ts';
+import { HandTrackingProvider } from './HandTrackingProvider.ts';
+import { handsToPoseSnapshot } from './handsToPose.ts';
+import { requiresHands, type GameMode } from '../game/modes.ts';
 import { attachStream, CameraError, startCamera, stopCamera, type CameraInfo } from './camera.ts';
 import type { PoseSnapshot } from './poseTypes.ts';
 import { DEFAULT_TRACKER_CONFIG, ZoneTracker, type ZoneEvent } from '../game/ZoneTracker.ts';
 import type { Zone } from '../game/zones.ts';
-import { defaultZones } from '../game/zones.ts';
+import { CORNERS_4, type TargetLayout } from '../game/zones.ts';
 import { RateCounter, RollingStat } from '../debug/telemetry.ts';
 import { EMPTY_TELEMETRY, type Settings, type TelemetryView } from '../ui/types.ts';
 
@@ -29,8 +32,9 @@ export interface PipelineError {
 /** Called on every pose frame, with whatever zone events it produced. */
 export type FrameHandler = (events: readonly ZoneEvent[], frame: PoseFrame) => void;
 
-export function scaledZones(scale: number): Zone[] {
-  return defaultZones().map((z) => ({ ...z, radius: z.radius * scale }));
+/** A layout's fixed targets at the player's chosen size. Spec §24. */
+export function scaledZones(scale: number, layout: TargetLayout = CORNERS_4): Zone[] {
+  return layout.build().map((z) => ({ ...z, radius: z.radius * scale }));
 }
 
 /**
@@ -43,10 +47,27 @@ export function scaledZones(scale: number): Zone[] {
  * the tracker measured aspect from one element and the layout from another,
  * targets would be drawn in one place and judged in another.
  */
+/**
+ * Whatever a mode's tracking backend turns out to be, this is all the pipeline
+ * needs from it.
+ */
+interface TrackingProvider {
+  setMirrored(mirrored: boolean): void;
+  stop(): void;
+  close(): void;
+  usesFrameCallback: boolean;
+  frameClockSource: 'captureTime' | 'presentationTime' | 'callback' | 'now';
+}
+
+/**
+ * @param mode decides which tracking model is loaded. Only the active mode's
+ * model is fetched, so a body-only session never downloads the hand model.
+ */
 export function usePosePipeline(
   settings: Settings,
   zonesRef: React.RefObject<Zone[]>,
   getAspect: () => number,
+  mode: GameMode,
   onFrame: FrameHandler,
 ) {
   const [status, setStatus] = useState<PipelineStatus>('idle');
@@ -54,10 +75,14 @@ export function usePosePipeline(
   const [telemetry, setTelemetry] = useState<TelemetryView>(EMPTY_TELEMETRY);
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const providerRef = useRef<MediaPipePoseProvider | null>(null);
+  const providerRef = useRef<TrackingProvider | null>(null);
   const cameraRef = useRef<CameraInfo | null>(null);
   const trackerRef = useRef(new ZoneTracker());
   const settingsRef = useRef(settings);
+  const modeRef = useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
   const snapshotRef = useRef<PoseSnapshot | null>(null);
   const detectedRef = useRef(false);
 
@@ -120,6 +145,41 @@ export function usePosePipeline(
     renderRate.current.reset();
   }, []);
 
+  /**
+   * Build and start the backend this mode requires.
+   *
+   * Hands force the GPU delegate. Measured: pose + hand costs 15.5 ms on GPU
+   * and 36 ms on CPU against a 33 ms budget, so on CPU a hands mode would
+   * stutter rather than merely run slower. docs/TRACKING.md.
+   */
+  const startBackend = useCallback(
+    async (video: HTMLVideoElement): Promise<TrackingProvider> => {
+      if (requiresHands(modeRef.current)) {
+        const provider = await HandTrackingProvider.create({ delegate: 'GPU' });
+        provider.setMirrored(settingsRef.current.mirrored);
+        provider.start(video, (frame) => {
+          handlePoseFrame({
+            snapshot: handsToPoseSnapshot(frame.timestampMs, frame.hands),
+            inferenceMs: frame.inferenceMs,
+            pipelineLatencyMs: frame.pipelineLatencyMs,
+            timestampSuspect: frame.timestampSuspect,
+            detected: frame.detected,
+          });
+        });
+        return provider;
+      }
+
+      const provider = await MediaPipePoseProvider.create({
+        modelVariant: settingsRef.current.modelVariant,
+        delegate: settingsRef.current.delegate,
+      });
+      provider.setMirrored(settingsRef.current.mirrored);
+      provider.start(video, handlePoseFrame);
+      return provider;
+    },
+    [handlePoseFrame],
+  );
+
   const start = useCallback(async () => {
     setStatus('loading');
     setError(null);
@@ -130,15 +190,8 @@ export function usePosePipeline(
       const video = videoRef.current!;
       await attachStream(video, camera.stream);
 
-      const provider = await MediaPipePoseProvider.create({
-        modelVariant: settingsRef.current.modelVariant,
-        delegate: settingsRef.current.delegate,
-      });
-      provider.setMirrored(settingsRef.current.mirrored);
-      providerRef.current = provider;
-
       trackerRef.current.reset();
-      provider.start(video, handlePoseFrame);
+      providerRef.current = await startBackend(video);
       setStatus('running');
     } catch (err) {
       teardown();
@@ -152,7 +205,7 @@ export function usePosePipeline(
       );
       setStatus('error');
     }
-  }, [handlePoseFrame, teardown]);
+  }, [startBackend, teardown]);
 
   const stop = useCallback(() => {
     teardown();
@@ -170,14 +223,8 @@ export function usePosePipeline(
     suspectStat.current.reset();
     poseRate.current.reset();
     try {
-      const provider = await MediaPipePoseProvider.create({
-        modelVariant: settingsRef.current.modelVariant,
-        delegate: settingsRef.current.delegate,
-      });
-      provider.setMirrored(settingsRef.current.mirrored);
-      providerRef.current = provider;
       trackerRef.current.reset();
-      provider.start(videoRef.current, handlePoseFrame);
+      providerRef.current = await startBackend(videoRef.current);
       setStatus('running');
     } catch (err) {
       setError({
@@ -186,7 +233,7 @@ export function usePosePipeline(
       });
       setStatus('error');
     }
-  }, [handlePoseFrame]);
+  }, [startBackend]);
 
   /** The cold path: publish a telemetry summary for display. */
   useEffect(() => {

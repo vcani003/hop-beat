@@ -92,6 +92,36 @@ adapter.
 
 ---
 
+## 2b. What it costs to ship both
+
+Measured, not estimated.
+
+**JavaScript bundle: effectively nothing.** Importing `GestureRecognizer`,
+`HolisticLandmarker` and `HandLandmarker` on top of `PoseLandmarker` changed
+the main chunk from **711,692 to 711,700 bytes — 8 bytes.**
+
+MediaPipe ships as one pre-bundled ES module. It does not tree-shake per class,
+so every hand class has been in the build since MVP 0. There was never anything
+to lazy-load on the JavaScript side, because there was never a saving to make.
+
+Building the whole hands mode — provider, adapter, mode registry, UI — cost
+**4.6 KB** (711.7 → 716.3 KB).
+
+**WASM runtime: shared.** Every vision task runs on the same
+`vision_wasm_internal.wasm`. Loading a second task does not load a second
+runtime.
+
+**Models: the only real cost, and already lazy.** `.task` files live in
+`public/` and are fetched by URL when a task is constructed — never bundled.
+Selecting the hands mode and starting the camera fetches
+`gesture_recognizer.task` (8.4 MB) and **nothing else**; the pose model is not
+downloaded at all. Verified by intercepting fetch.
+
+So "lazy load the module as we use the feature" is already the behaviour, and
+the unit that loads lazily is the model rather than the code.
+
+---
+
 ## 3. Proposed architecture — capabilities, declared per mode
 
 The thing to avoid is every mode paying for every capability. So a mode
@@ -182,6 +212,12 @@ sharing one pass, which is a second argument for it.
 3. **Then decide Holistic vs two models** for combined modes, with real numbers.
 4. Build the capability resolver once there are two modes to resolve between.
    One mode does not need an abstraction.
+
+**Built since:** `src/game/modes.ts` declares `body` and `hands` modes with
+their capabilities, and `usePosePipeline` loads only the backend the active
+mode requires. Hands are adapted into a `PoseSnapshot` so both modes drive the
+same engine, the same charts and the same judgment — which is the only way
+comparing them means anything.
 
 Reproduce the benchmark models with:
 

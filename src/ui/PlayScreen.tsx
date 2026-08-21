@@ -36,6 +36,7 @@ import type { PlaybackAdapter } from '../playback/PlaybackAdapter.ts';
 import { GameRenderer } from '../render/pixi/GameRenderer.ts';
 import { scaledZones, usePosePipeline } from '../pose/usePosePipeline.ts';
 import { checkPosition, type PositionCheck } from '../game/positioning.ts';
+import { findMode, GAME_MODES, requiresHands } from '../game/modes.ts';
 import { stepZoneScale, zoneScaleForKey } from '../game/targetSizing.ts';
 import type { Zone } from '../game/zones.ts';
 import { loadSettings, saveSettings } from './settingsStorage.ts';
@@ -75,6 +76,8 @@ export default function PlayScreen() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [phase, setPhase] = useState<Phase>('intro');
   const [hud, setHud] = useState<HudView>(EMPTY_HUD);
+  const [modeId, setModeId] = useState<string>('body');
+  const mode = findMode(modeId);
   const [trackId, setTrackId] = useState<string>('warmup');
   const [grid, setGrid] = useState<{ bpm: number; firstBeatMs: number } | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -107,8 +110,8 @@ export default function PlayScreen() {
    */
   const zonesRef = useRef<Zone[]>(scaledZones(settings.zoneScale));
   useEffect(() => {
-    zonesRef.current = scaledZones(settings.zoneScale);
-  }, [settings.zoneScale]);
+    zonesRef.current = scaledZones(settings.zoneScale, mode.layout);
+  }, [settings.zoneScale, mode]);
 
   /**
    * A brief on-screen readout after a size change, so the player sees the new
@@ -200,7 +203,7 @@ export default function PlayScreen() {
     [presentJudgments],
   );
 
-  const pose = usePosePipeline(settings, zonesRef, fieldAspect, onPoseFrame);
+  const pose = usePosePipeline(settings, zonesRef, fieldAspect, mode, onPoseFrame);
   const { snapshotRef, detectedRef, videoRef, renderRate } = pose;
 
   // ---- PixiJS lifecycle ----
@@ -531,6 +534,7 @@ export default function PlayScreen() {
               The four targets are fixed — they are in the same place every game. Move
               yourself until you can reach all of them.
             </p>
+            <p className="play__hint" style={{ fontSize: '0.75rem' }}>{mode.stance}</p>
 
             <p
               className="play__guidance"
@@ -583,8 +587,27 @@ export default function PlayScreen() {
             <div className="play__panel">
               <h1 className="stage__title">hop<span>//</span>beat</h1>
               <p className="play__hint">
-                A webcam turns your body into the controller. Set up once, then play
-                anything — the fit stays until you move.
+                A webcam turns your body into the controller. Pick a mode, set up once,
+                then play.
+              </p>
+
+              <div className="songselect">
+                {GAME_MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    className={`songselect__item ${modeId === m.id ? 'is-active' : ''}`}
+                    onClick={() => setModeId(m.id)}
+                    disabled={phase === 'arming'}
+                  >
+                    <span className="songselect__title">{m.name}</span>
+                    <span className="songselect__meta">{m.description}</span>
+                  </button>
+                ))}
+              </div>
+
+              <p className="play__hint" style={{ fontSize: '0.72rem' }}>
+                {mode.modelSizeMb} MB model, downloaded when you start this mode.
+                {requiresHands(mode) ? ' Needs the GPU delegate.' : ''}
               </p>
               {fatalError && <div className="error"><div className="error__title">{fatalError}</div></div>}
               {pose.error && (
@@ -767,6 +790,8 @@ export default function PlayScreen() {
 
         {live && (
           <>
+            <div className="row"><span className="row__label">mode</span>
+              <span className="row__value mono">{mode.name}</span></div>
             <div className="row"><span className="row__label">timing bias</span>
               <span className="row__value mono">
                 {meanDeltaMs(score) === null

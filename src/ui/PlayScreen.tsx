@@ -43,7 +43,13 @@ import { navigate } from './useHashRoute.ts';
 import type { Settings } from './types.ts';
 import type { ZoneEvent } from '../game/ZoneTracker.ts';
 
-type Phase = 'menu' | 'arming' | 'calibrating' | 'playing' | 'paused' | 'results';
+/**
+ * Setup happens once, then songs are played from a menu that never
+ * recalibrates. Fitting the field is about where the PLAYER is, not about
+ * which track is queued — making it a per-song step charged everyone four
+ * seconds for information that had not changed.
+ */
+type Phase = 'intro' | 'arming' | 'calibrating' | 'menu' | 'playing' | 'paused' | 'results';
 
 /**
  * How long to watch the player before fitting the field to them.
@@ -75,7 +81,7 @@ const EMPTY_HUD: HudView = {
 
 export default function PlayScreen() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
-  const [phase, setPhase] = useState<Phase>('menu');
+  const [phase, setPhase] = useState<Phase>('intro');
   const [hud, setHud] = useState<HudView>(EMPTY_HUD);
   const [trackId, setTrackId] = useState<string>('warmup');
   const [grid, setGrid] = useState<{ bpm: number; firstBeatMs: number } | null>(null);
@@ -351,14 +357,23 @@ export default function PlayScreen() {
     rebuildZones();
   }, [rebuildZones, fieldAspect]);
 
-  /** Camera first, then the fit, then the song. */
-  const begin = useCallback(async () => {
+  /** One-time setup: camera, then fit the field, then hand over to the menu. */
+  const setUp = useCallback(async () => {
     setPhase('arming');
     if (pose.status !== 'running') await pose.start();
-    if (pose.status === 'error') { setPhase('menu'); return; }
+    if (pose.status === 'error') {
+      setPhase('intro');
+      return;
+    }
     await calibrate();
-    await startSong();
-  }, [pose, calibrate, startSong]);
+    setPhase('menu');
+  }, [pose, calibrate]);
+
+  /** Re-fit without leaving the menu, for when the player has moved. */
+  const refit = useCallback(async () => {
+    await calibrate();
+    setPhase('menu');
+  }, [calibrate]);
 
   const pause = useCallback(() => {
     adapterRef.current?.pause();
@@ -399,9 +414,10 @@ export default function PlayScreen() {
     setHud(EMPTY_HUD);
   }, [teardownSong]);
 
+  /** Replaying goes straight back into the song — the fit still holds. */
   const retry = useCallback(() => {
-    void begin();
-  }, [begin]);
+    void startSong();
+  }, [startSong]);
 
   useEffect(() => teardownSong, [teardownSong]);
 
@@ -481,10 +497,43 @@ export default function PlayScreen() {
           </div>
         )}
 
-        {(phase === 'menu' || phase === 'arming') && (
+        {(phase === 'intro' || phase === 'arming') && (
           <div className="play__overlay">
             <div className="play__panel">
               <h1 className="stage__title">hop<span>//</span>beat</h1>
+              <p className="play__hint">
+                A webcam turns your body into the controller. Set up once, then play
+                anything — the fit stays until you move.
+              </p>
+              {fatalError && <div className="error"><div className="error__title">{fatalError}</div></div>}
+              {pose.error && (
+                <div className="error">
+                  <div className="error__title">{pose.error.message}</div>
+                  <div className="error__hint">{pose.error.hint}</div>
+                </div>
+              )}
+              <button
+                className="button--primary"
+                onClick={setUp}
+                disabled={phase === 'arming'}
+              >
+                {phase === 'arming' ? 'Starting camera…' : 'Start camera'}
+              </button>
+              <div className="play__links">
+                <button className="button--quiet" onClick={() => navigate('/debug')}>
+                  MVP 0 debug view
+                </button>
+                <button className="button--quiet" onClick={() => navigate('/spec')}>
+                  Spec progress
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {phase === 'menu' && (
+          <div className="play__overlay">
+            <div className="play__panel">
               <div className="songselect">
                 <button
                   className={`songselect__item ${trackId === 'warmup' ? 'is-active' : ''}`}
@@ -509,9 +558,7 @@ export default function PlayScreen() {
 
               <p className="play__hint">
                 {map.notes.length} notes · {map.analysis.bpm.toFixed(1)} BPM
-                {track
-                  ? ' · tempo is an estimate, not ground truth — correct it below if the notes drift out of time.'
-                  : ' · a click track we generate ourselves, so nothing here needs a licence.'}
+                {track ? ' · tempo is estimated — correct it below if the notes drift out of time.' : ''}
               </p>
 
               {track && (
@@ -548,20 +595,27 @@ export default function PlayScreen() {
                 that your head and hips are both in frame.
               </p>
               {fatalError && <div className="error"><div className="error__title">{fatalError}</div></div>}
-              {pose.error && (
-                <div className="error">
-                  <div className="error__title">{pose.error.message}</div>
-                  <div className="error__hint">{pose.error.hint}</div>
-                </div>
-              )}
-              <button
-                className="button--primary"
-                onClick={begin}
-                disabled={phase === 'arming'}
-              >
-                {phase === 'arming' ? 'Starting camera…' : 'Play'}
+
+              <button className="button--primary" onClick={() => void startSong()}>
+                Play
               </button>
-              <p className="play__hint" style={{ fontSize: '0.72rem' }}>{calibrationLabel}</p>
+
+              <div className="menufit">
+                <span className="menufit__label">{calibrationLabel}</span>
+                <button className="button--quiet" onClick={() => void refit()}>
+                  Re-fit
+                </button>
+              </div>
+
+              <label className="checkbox" style={{ justifyContent: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.showVideo}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, showVideo: e.target.checked }))}
+                />
+                show camera
+              </label>
+
               <div className="play__links">
                 <button className="button--quiet" onClick={() => navigate('/debug')}>
                   MVP 0 debug view
@@ -669,12 +723,38 @@ export default function PlayScreen() {
           bias means the windows are hard, not miscalibrated.
         </p>
 
+        <h2 className="panel__heading" style={{ marginTop: 18 }}>View</h2>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={settings.showVideo}
+            onChange={(e) => setSettings((prev) => ({ ...prev, showVideo: e.target.checked }))}
+          />
+          show camera
+        </label>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={settings.showSkeleton}
+            onChange={(e) => setSettings((prev) => ({ ...prev, showSkeleton: e.target.checked }))}
+          />
+          show skeleton
+        </label>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={settings.mirrored}
+            onChange={(e) => setSettings((prev) => ({ ...prev, mirrored: e.target.checked }))}
+          />
+          mirror
+        </label>
+
         <h2 className="panel__heading" style={{ marginTop: 18 }}>Field</h2>
         <p className="hint">{calibrationLabel}</p>
         <button
           style={{ marginTop: 8 }}
-          disabled={pose.status !== 'running' || phase === 'calibrating'}
-          onClick={() => void calibrate()}
+          disabled={pose.status !== 'running' || phase === 'calibrating' || phase === 'playing'}
+          onClick={() => void refit()}
         >
           Re-fit to me
         </button>

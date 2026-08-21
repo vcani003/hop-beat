@@ -719,3 +719,17 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   padding: 1rem 1.2rem;
   z-index: 5;
 }
+
+.menufit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 8px 7px 11px;
+  text-align: left;
+}
+.menufit__label { font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
+.menufit button { width: auto; flex: 0 0 auto; font-size: 11px; padding: 5px 10px; }

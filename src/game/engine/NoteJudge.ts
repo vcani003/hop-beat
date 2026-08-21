@@ -24,6 +24,23 @@ export interface TimingWindows {
  */
 export const DEFAULT_WINDOWS: TimingWindows = { perfectMs: 80, goodMs: 160 };
 
+/**
+ * Easy widens the windows as well as thinning the chart.
+ *
+ * Spec §7 calls these tunable and says not to lock them before real-device
+ * testing — and real-device testing said the game was hard. Some of that is
+ * density, but some is that ±80 ms is a tight ask when roughly 28 ms of it is
+ * spent in the camera pipeline before the player's movement is even seen.
+ */
+export const WINDOWS_BY_DIFFICULTY: Record<string, TimingWindows> = {
+  easy: { perfectMs: 130, goodMs: 240 },
+  normal: DEFAULT_WINDOWS,
+};
+
+export function windowsFor(difficulty: string | undefined): TimingWindows {
+  return WINDOWS_BY_DIFFICULTY[difficulty ?? 'normal'] ?? DEFAULT_WINDOWS;
+}
+
 /** Runtime state for one note in a chart. */
 export interface ActiveNote {
   note: Note;

@@ -809,3 +809,20 @@ kbd {
   border-radius: 4px;
   padding: 0 4px;
 }
+
+.difficulty {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin: 0.5rem 0;
+}
+.difficulty button {
+  text-transform: capitalize;
+  padding: 7px;
+  font-size: 12px;
+}
+.difficulty button.is-active {
+  border-color: var(--violet);
+  background: rgba(139, 92, 246, 0.14);
+  color: var(--text);
+}

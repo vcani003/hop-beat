@@ -12,7 +12,7 @@
  */
 import warmup from '../../../maps/fixtures/click-120-warmup.json';
 import { parseBeatmap } from './validator.ts';
-import { buildPatternChart } from './patterns.ts';
+import { buildPatternChart, type Difficulty } from './patterns.ts';
 import type { Beatmap } from './schema.ts';
 
 /** Validated at module load: a malformed shipped chart is a build problem. */
@@ -78,9 +78,10 @@ export const LOCAL_TRACKS: LocalTrack[] = [
 /** Build a chart for a local track, optionally overriding the measured grid. */
 export function chartForTrack(
   track: LocalTrack,
-  overrides: { bpm?: number; firstBeatMs?: number } = {},
+  overrides: { bpm?: number; firstBeatMs?: number; difficulty?: Difficulty } = {},
 ): Beatmap {
   return buildPatternChart({
+    difficulty: overrides.difficulty ?? 'normal',
     id: track.id,
     title: track.title,
     artist: track.artist,

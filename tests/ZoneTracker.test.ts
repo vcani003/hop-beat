@@ -370,3 +370,74 @@ describe('ZoneTracker — swept collision catches a hand that moves between fram
     }
   });
 });
+
+describe('ZoneTracker — striking the same target twice without leaving it', () => {
+  /**
+   * The reported problem: "even when I hit, it doesn't capture, or maybe cus I
+   * don't fully leave."
+   *
+   * Exactly that. A second hit used to require a full geometric exit — the hand
+   * had to travel past 1.3x the radius and stay there through the grace period
+   * before it could count again. Nobody plays that way. A repeated strike is a
+   * short pull back and another jab, like hitting a drum.
+   */
+  it('counts a second strike after only a small pull back', () => {
+    const tracker = new ZoneTracker(config({ reArmRadiusScale: 0.7, refractoryMs: 0 }));
+
+    // Arrive.
+    expect(tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT).map((e) => e.type))
+      .toEqual(['ZONE_ENTER']);
+
+    // Pull back to the edge of the target — NOT out of it — then strike again.
+    tracker.update(snapshot(60, { leftWrist: at(0.09) }), ZONES, ASPECT);
+    const second = tracker.update(snapshot(120, { leftWrist: at(0.01) }), ZONES, ASPECT);
+    expect(second.map((e) => e.type)).toEqual(['ZONE_ENTER']);
+
+    // And a third, still never having left.
+    tracker.update(snapshot(180, { leftWrist: at(0.09) }), ZONES, ASPECT);
+    expect(tracker.update(snapshot(240, { leftWrist: at(0) }), ZONES, ASPECT).map((e) => e.type))
+      .toEqual(['ZONE_ENTER']);
+  });
+
+  it('does not fire again from jitter alone', () => {
+    const tracker = new ZoneTracker(config({ reArmRadiusScale: 0.7, refractoryMs: 0 }));
+    tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT);
+
+    // A hand held at the centre, wobbling by a couple of pixels.
+    let t = 33;
+    for (const wobble of [0.004, -0.003, 0.005, -0.002, 0.003, -0.004]) {
+      expect(tracker.update(snapshot(t, { leftWrist: at(wobble) }), ZONES, ASPECT), `t=${t}`)
+        .toEqual([]);
+      t += 33;
+    }
+  });
+
+  it('still needs a real pull back, not a twitch', () => {
+    const tracker = new ZoneTracker(config({ reArmRadiusScale: 0.7, refractoryMs: 0 }));
+    tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT);
+    // 0.05 is half the radius — inside the re-arm threshold of 0.07.
+    tracker.update(snapshot(60, { leftWrist: at(0.05) }), ZONES, ASPECT);
+    expect(tracker.update(snapshot(120, { leftWrist: at(0) }), ZONES, ASPECT)).toEqual([]);
+  });
+
+  it('sustains eighth notes at 120 BPM on one target', () => {
+    const tracker = new ZoneTracker(config({ reArmRadiusScale: 0.7, refractoryMs: 0 }));
+    let hits = 0;
+    // Jab in and out by half the zone width, every 250 ms, sampled at 30 Hz.
+    for (let t = 0; t < 3000; t += 33) {
+      const phase = (t % 250) / 250;
+      const offset = phase < 0.4 ? 0.0 : 0.09;
+      hits += tracker
+        .update(snapshot(t, { leftWrist: at(offset) }), ZONES, ASPECT)
+        .filter((e) => e.type === 'ZONE_ENTER').length;
+    }
+    expect(hits).toBeGreaterThanOrEqual(11);
+  });
+
+  it('still reports leaving the target when the hand actually leaves', () => {
+    const tracker = new ZoneTracker(config({ exitGraceMs: 0, reArmRadiusScale: 0.7 }));
+    tracker.update(snapshot(0, { leftWrist: at(0) }), ZONES, ASPECT);
+    const events = tracker.update(snapshot(60, { leftWrist: at(0.5) }), ZONES, ASPECT);
+    expect(events.map((e) => e.type)).toEqual(['ZONE_EXIT']);
+  });
+});

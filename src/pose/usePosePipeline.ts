@@ -110,6 +110,7 @@ export function usePosePipeline(
       exitGraceMs: settings.exitGraceMs,
       refractoryMs: settings.refractoryMs,
       requireInFrame: settings.requireInFrame,
+      reArmRadiusScale: DEFAULT_TRACKER_CONFIG.reArmRadiusScale,
       sweptCollision: settings.sweptCollision,
       maxSweepGapMs: DEFAULT_TRACKER_CONFIG.maxSweepGapMs,
     });

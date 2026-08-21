@@ -37,6 +37,19 @@ export interface ZoneTrackerConfig {
   minVisibility: number;
   /** Exit radius as a multiple of enter radius. Must be >= 1. */
   exitRadiusScale: number;
+  /**
+   * How far back the hand must pull before it can hit the same target again,
+   * as a multiple of the target radius.
+   *
+   * This is the difference between "tap twice" and "leave and come back".
+   * Below 1.0 the hand re-arms while still INSIDE the target, so a repeated
+   * strike works the way a drum does — pull back a little, hit again — rather
+   * than requiring the arm to travel clear of the zone between every note.
+   *
+   * Reported as: "even when I hit, it doesn't capture, or maybe cus I don't
+   * fully leave." Exactly that: re-entry was gated on a full geometric exit.
+   */
+  reArmRadiusScale: number;
   /** How long an exit condition must persist before ZONE_EXIT is emitted. */
   exitGraceMs: number;
   /** Minimum gap between leaving a zone and being able to re-enter it. */
@@ -58,6 +71,9 @@ export interface ZoneTrackerConfig {
 export const DEFAULT_TRACKER_CONFIG: ZoneTrackerConfig = {
   minVisibility: 0.5,
   exitRadiusScale: 1.3,
+  // Well inside the target, and still far enough that landmark jitter — a few
+  // pixels — cannot re-arm on its own.
+  reArmRadiusScale: 0.7,
   exitGraceMs: 80,
   // Zero by default: hysteresis and grace already suppress chatter, and a
   // rhythm game must allow genuinely fast repeat hits — two sixteenth notes at
@@ -107,6 +123,12 @@ export interface ZoneEvent {
 
 interface PairState {
   inside: boolean;
+  /**
+   * Whether a new strike may fire. Cleared by a hit, restored once the hand
+   * pulls back past the re-arm radius — which is a shorter journey than
+   * leaving the zone.
+   */
+  armed: boolean;
   enteredAtMs: number;
   /** When the exit condition first became true, or null if it currently isn't. */
   exitCandidateSinceMs: number | null;
@@ -184,6 +206,7 @@ export class ZoneTracker {
         const key = pairKey(zone.id, limb);
         const state = this.state.get(key) ?? {
           inside: false,
+          armed: true,
           enteredAtMs: 0,
           exitCandidateSinceMs: null,
           lastExitMs: Number.NEGATIVE_INFINITY,
@@ -240,6 +263,7 @@ export class ZoneTracker {
 
           if (sweptInside && trusted && pastRefractory) {
             state.inside = true;
+            state.armed = false;
             state.enteredAtMs = enterTimeMs;
             state.exitCandidateSinceMs = null;
             state.blockedApproach = false;
@@ -271,6 +295,27 @@ export class ZoneTracker {
             });
           }
         } else {
+          // Re-arm well before the hand has left. A repeated strike should feel
+          // like hitting a drum twice, not like leaving the room and returning.
+          if (distance > zone.radius * this.config.reArmRadiusScale) state.armed = true;
+
+          // Already inside and re-armed: a fresh inward strike counts, without
+          // ever requiring a geometric exit first.
+          const strikeAgain =
+            state.armed && trusted && distance <= zone.radius * this.config.reArmRadiusScale;
+          if (strikeAgain && now - state.lastExitMs >= this.config.refractoryMs) {
+            state.armed = false;
+            state.enteredAtMs = enterTimeMs;
+            events.push({
+              type: 'ZONE_ENTER',
+              zoneId: zone.id,
+              limb,
+              timestampMs: enterTimeMs,
+              distance: enterDistance,
+              ...(swept ? { swept: true } : {}),
+            });
+          }
+
           const beyondExitRadius = distance > zone.radius * this.config.exitRadiusScale;
           const shouldExit = beyondExitRadius || !trusted;
 
@@ -282,6 +327,7 @@ export class ZoneTracker {
             state.exitCandidateSinceMs ??= now;
             if (now - state.exitCandidateSinceMs >= this.config.exitGraceMs) {
               state.inside = false;
+              state.armed = true;
               state.lastExitMs = now;
               state.blockedApproach = false;
               events.push({

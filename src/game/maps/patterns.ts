@@ -25,6 +25,33 @@ interface PatternStep {
   limb?: NoteLimb;
 }
 
+export type Difficulty = 'easy' | 'normal';
+
+/**
+ * EASY: one target every two beats, and only ever one at a time.
+ *
+ * Written after playing revealed the obvious: "I still think the game is very
+ * hard... hard to keep track." A chart that is hard to READ is not difficult,
+ * it is unfair, and a first chart's job is to teach where the targets are.
+ *
+ * So: half the density of normal, no eighth notes, no handed notes, no
+ * diagonals, and a phrase that repeats plainly enough to be anticipated.
+ */
+const PHRASE_EASY: PatternStep[] = [
+  { beat: 0, zone: UL }, { beat: 2, zone: UR },
+  { beat: 4, zone: UL }, { beat: 6, zone: UR },
+  { beat: 8, zone: LL }, { beat: 10, zone: LR },
+  { beat: 12, zone: LL }, { beat: 14, zone: LR },
+];
+
+/** EASY, second phrase: same pulse, now moving between top and bottom. */
+const PHRASE_EASY_B: PatternStep[] = [
+  { beat: 0, zone: UL }, { beat: 2, zone: LL },
+  { beat: 4, zone: UR }, { beat: 6, zone: LR },
+  { beat: 8, zone: UL }, { beat: 10, zone: LL },
+  { beat: 12, zone: UR }, { beat: 14, zone: LR },
+];
+
 /**
  * One 16-beat phrase, repeated for the length of the track with variations.
  *
@@ -61,7 +88,7 @@ export interface PatternChartOptions {
   durationMs: number;
   /** Bars of silence at the start before notes begin. */
   restBars?: number;
-  difficulty?: string;
+  difficulty?: Difficulty;
 }
 
 export function buildPatternChart(options: PatternChartOptions): Beatmap {
@@ -69,14 +96,17 @@ export function buildPatternChart(options: PatternChartOptions): Beatmap {
   const beatMs = 60_000 / bpm;
   const phraseBeats = 16;
 
+  const difficulty: Difficulty = options.difficulty ?? 'normal';
+  const phrases =
+    difficulty === 'easy' ? [PHRASE_EASY, PHRASE_EASY_B] : [PHRASE_A, PHRASE_B];
+
   const notes: Note[] = [];
   let phraseIndex = 0;
   let beatCursor = restBars * 4;
 
   // Stop a full phrase before the end so a chart never runs past its audio.
   while ((beatCursor + phraseBeats) * beatMs + firstBeatMs < durationMs - beatMs) {
-    // Alternate, with B appearing more often once the track is under way.
-    const phrase = phraseIndex === 0 || phraseIndex % 2 === 0 ? PHRASE_A : PHRASE_B;
+    const phrase = phrases[phraseIndex % phrases.length];
     for (const step of phrase) {
       notes.push({
         id: `n${(notes.length + 1).toString().padStart(3, '0')}`,
@@ -108,7 +138,7 @@ export function buildPatternChart(options: PatternChartOptions): Beatmap {
       offsetMs: 0,
       generatorVersion: 'handmade-pattern-1',
     },
-    difficulty: options.difficulty ?? 'normal',
+    difficulty,
     // The PATTERN is hand-designed; only its placement in time is computed.
     mapType: 'handmade',
     notes,

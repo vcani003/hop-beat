@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameClock } from '../game/engine/GameClock.ts';
 import { GameEngine, type JudgmentEvent } from '../game/engine/GameEngine.ts';
-import { DEFAULT_WINDOWS } from '../game/engine/NoteJudge.ts';
+import { windowsFor } from '../game/engine/NoteJudge.ts';
 import {
   accuracy,
   grade,
@@ -30,6 +30,7 @@ import {
 } from '../game/engine/ScoreSystem.ts';
 import { beatmapDurationMs, type Beatmap } from '../game/maps/schema.ts';
 import { chartForTrack, LOCAL_TRACKS, WARMUP_MAP, type LocalTrack } from '../game/maps/library.ts';
+import type { Difficulty } from '../game/maps/patterns.ts';
 import { ClickTrackAdapter } from '../playback/ClickTrackAdapter.ts';
 import { LocalAudioAdapter } from '../playback/LocalAudioAdapter.ts';
 import type { PlaybackAdapter } from '../playback/PlaybackAdapter.ts';
@@ -79,6 +80,7 @@ export default function PlayScreen() {
   const [modeId, setModeId] = useState<string>('body');
   const mode = findMode(modeId);
   const [trackId, setTrackId] = useState<string>('warmup');
+  const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [grid, setGrid] = useState<{ bpm: number; firstBeatMs: number } | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
   /**
@@ -96,8 +98,8 @@ export default function PlayScreen() {
    */
   const map: Beatmap = useMemo(() => {
     if (!track) return WARMUP_MAP;
-    return chartForTrack(track, grid ?? undefined);
-  }, [track, grid]);
+    return chartForTrack(track, { ...grid, difficulty });
+  }, [track, grid, difficulty]);
 
   // Declared before the callbacks that read it, and before the pose hook that
   // is handed it — ordering here is load-bearing, not stylistic.
@@ -344,7 +346,7 @@ export default function PlayScreen() {
     adapterRef.current = adapter;
     const clock = new GameClock(adapter, { offsetMs: settings.audioOffsetMs });
     clockRef.current = clock;
-    engineRef.current = new GameEngine(clock, map, { windows: DEFAULT_WINDOWS });
+    engineRef.current = new GameEngine(clock, map, { windows: windowsFor(map.difficulty) });
 
     try {
       await adapter.play();
@@ -684,8 +686,21 @@ export default function PlayScreen() {
                 ))}
               </div>
 
+              <div className="difficulty">
+                {(['easy', 'normal'] as const).map((d) => (
+                  <button
+                    key={d}
+                    className={difficulty === d ? 'is-active' : ''}
+                    onClick={() => setDifficulty(d)}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+
               <p className="play__hint">
                 {map.notes.length} notes · {map.analysis.bpm.toFixed(1)} BPM
+                {' · ±'}{windowsFor(map.difficulty).goodMs}ms window
                 {track ? ' · tempo is estimated — correct it below if the notes drift out of time.' : ''}
               </p>
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPatternChart } from '../src/game/maps/patterns.ts';
+import { windowsFor } from '../src/game/engine/NoteJudge.ts';
 import { chartForTrack, LOCAL_TRACKS, WARMUP_MAP } from '../src/game/maps/library.ts';
 import { validateBeatmap } from '../src/game/maps/validator.ts';
 
@@ -97,5 +98,70 @@ describe('the track library', () => {
   it('keeps the warm-up chart on the click track, needing no audio file', () => {
     expect(WARMUP_MAP.song.playback.provider).toBe('clickTrack');
     expect(WARMUP_MAP.song.playback.src).toBeUndefined();
+  });
+});
+
+describe('difficulty', () => {
+  const at = (bpm = 120, durationMs = 120_000, difficulty?: 'easy' | 'normal') =>
+    buildPatternChart(opts({ bpm, durationMs, difficulty }));
+
+  /**
+   * Written after play: "I still think the game is very hard... hard to keep
+   * track." A chart that is hard to READ is not difficult, it is unfair.
+   */
+  it('gives easy roughly half the notes of normal', () => {
+    const easy = at(120, 120_000, 'easy').notes.length;
+    const normal = at(120, 120_000, 'normal').notes.length;
+    expect(easy).toBeLessThan(normal);
+    expect(easy / normal).toBeLessThan(0.65);
+  });
+
+  it('never puts two easy notes closer than a beat apart', () => {
+    const notes = at(120, 120_000, 'easy').notes;
+    const beatMs = 60_000 / 120;
+    for (let i = 1; i < notes.length; i++) {
+      expect(notes[i].timeMs - notes[i - 1].timeMs, `notes ${i - 1}->${i}`)
+        .toBeGreaterThanOrEqual(beatMs - 1);
+    }
+  });
+
+  it('never asks a specific hand on easy', () => {
+    expect(at(120, 120_000, 'easy').notes.every((n) => n.limb === 'eitherHand')).toBe(true);
+  });
+
+  it('never overlaps two easy notes in time', () => {
+    const times = at(120, 120_000, 'easy').notes.map((n) => n.timeMs);
+    expect(new Set(times).size).toBe(times.length);
+  });
+
+  it('still uses all four targets on easy, so the layout is learned', () => {
+    expect(new Set(at(120, 120_000, 'easy').notes.map((n) => n.zone)).size).toBe(4);
+  });
+
+  it('records the difficulty it was built at', () => {
+    expect(at(120, 60_000, 'easy').difficulty).toBe('easy');
+    expect(at(120, 60_000, 'normal').difficulty).toBe('normal');
+  });
+});
+
+describe('timing windows by difficulty', () => {
+  it('is more forgiving on easy than on normal', () => {
+    expect(windowsFor('easy').perfectMs).toBeGreaterThan(windowsFor('normal').perfectMs);
+    expect(windowsFor('easy').goodMs).toBeGreaterThan(windowsFor('normal').goodMs);
+  });
+
+  it('falls back to the normal windows for anything unrecognised', () => {
+    expect(windowsFor(undefined)).toEqual(windowsFor('normal'));
+    expect(windowsFor('nightmare')).toEqual(windowsFor('normal'));
+  });
+
+  /**
+   * Roughly 28 ms of the window is spent in the camera pipeline before the
+   * player's movement is even seen, so a window must leave room for it.
+   */
+  it('leaves room for the measured input latency', () => {
+    for (const d of ['easy', 'normal']) {
+      expect(windowsFor(d).perfectMs, d).toBeGreaterThan(28 * 2);
+    }
   });
 });

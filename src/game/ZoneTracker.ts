@@ -30,7 +30,7 @@ import type { FieldPoint, InputLimb, PoseSnapshot } from '../pose/poseTypes.ts';
 import { INPUT_LIMBS } from '../pose/poseTypes.ts';
 import { isInFrame } from '../pose/transforms.ts';
 import type { Zone, ZoneId } from './zones.ts';
-import { distanceToZone } from './zones.ts';
+import { distanceToZone, sweptDistanceToZone } from './zones.ts';
 
 export interface ZoneTrackerConfig {
   /** Reject landmarks the model is not confident about. 0–1. */
@@ -43,6 +43,16 @@ export interface ZoneTrackerConfig {
   refractoryMs: number;
   /** Ignore landmarks MediaPipe has extrapolated outside the camera frame. */
   requireInFrame: boolean;
+  /**
+   * Test the path between pose samples, not just the samples themselves.
+   * Without this a fast hand tunnels straight through a zone between frames.
+   */
+  sweptCollision: boolean;
+  /**
+   * Ignore a previous sample older than this when sweeping. A stale sample
+   * would describe a path the hand did not take in one motion.
+   */
+  maxSweepGapMs: number;
 }
 
 export const DEFAULT_TRACKER_CONFIG: ZoneTrackerConfig = {
@@ -55,6 +65,8 @@ export const DEFAULT_TRACKER_CONFIG: ZoneTrackerConfig = {
   // proves otherwise.
   refractoryMs: 0,
   requireInFrame: true,
+  sweptCollision: true,
+  maxSweepGapMs: 120,
 };
 
 /**
@@ -86,6 +98,11 @@ export interface ZoneEvent {
   reason?: BlockReason;
   /** ZONE_BLOCKED, reason 'refractory': how much longer the lockout had left. */
   remainingMs?: number;
+  /**
+   * True when the entry was found by sweeping the path between samples rather
+   * than by a sample landing inside. Its timestamp is interpolated.
+   */
+  swept?: boolean;
 }
 
 interface PairState {
@@ -113,8 +130,16 @@ export interface BlockedCounts {
   visibility: number;
 }
 
+interface LimbSample {
+  x: number;
+  y: number;
+  timestampMs: number;
+}
+
 export class ZoneTracker {
   private state = new Map<string, PairState>();
+  /** Last trusted position of each limb, for swept collision. */
+  private previous = new Map<InputLimb, LimbSample>();
   private config: ZoneTrackerConfig;
   private blocked: BlockedCounts = { refractory: 0, visibility: 0 };
 
@@ -129,6 +154,7 @@ export class ZoneTracker {
   /** Forget all tracking state — e.g. after the camera restarts. */
   reset(): void {
     this.state.clear();
+    this.previous.clear();
     this.blocked = { refractory: 0, visibility: 0 };
   }
 
@@ -167,21 +193,68 @@ export class ZoneTracker {
         const distance = distanceToZone(point, zone, aspect);
         const trusted = this.isTrusted(point);
 
+        // Sweep the path from the previous sample. `enterDistance` is the
+        // closest the hand came, which is what decides a hit; `distance` stays
+        // the CURRENT distance and is what decides whether it has left.
+        let enterDistance = distance;
+        let enterTimeMs = now;
+        let swept = false;
+        const last = this.previous.get(limb);
+        if (
+          this.config.sweptCollision &&
+          trusted &&
+          last &&
+          now - last.timestampMs <= this.config.maxSweepGapMs
+        ) {
+          const hit = sweptDistanceToZone(last, point, zone, aspect);
+          if (hit.distance < enterDistance) {
+            enterDistance = hit.distance;
+            // Interpolate the crossing time. The hand reached the zone partway
+            // between two frames, and saying so is worth up to ~35 ms of
+            // timing accuracy the judge would otherwise lose.
+            enterTimeMs = last.timestampMs + hit.t * (now - last.timestampMs);
+            swept = true;
+          }
+        }
+
         if (!state.inside) {
-          const withinEnterRadius = distance <= zone.radius;
+          // Two different questions, deliberately answered by two different
+          // measurements:
+          //
+          //   sweptInside — did the hand's PATH cross the zone? This decides a
+          //     hit, and is what stops a fast arm tunnelling straight through.
+          //
+          //   pointInside — is the hand AT the zone right now? This tracks
+          //     whether one continuous approach is still under way. Using the
+          //     swept answer here would keep an approach "live" while the hand
+          //     withdrew through the zone it had just left, and two separate
+          //     attempts would be counted as one.
+          const sweptInside = enterDistance <= zone.radius;
+          const pointInside = distance <= zone.radius;
           const pastRefractory = now - state.lastExitMs >= this.config.refractoryMs;
 
-          if (!withinEnterRadius) {
+          if (!pointInside) {
             // The approach is over; the next one starts fresh.
             state.blockedApproach = false;
-          } else if (trusted && pastRefractory) {
+          }
+
+          if (sweptInside && trusted && pastRefractory) {
             state.inside = true;
-            state.enteredAtMs = now;
+            state.enteredAtMs = enterTimeMs;
             state.exitCandidateSinceMs = null;
             state.blockedApproach = false;
-            events.push({ type: 'ZONE_ENTER', zoneId: zone.id, limb, timestampMs: now, distance });
-          } else if (!state.blockedApproach) {
-            // Inside the radius, and refused. Report it once per approach.
+            events.push({
+              type: 'ZONE_ENTER',
+              zoneId: zone.id,
+              limb,
+              timestampMs: enterTimeMs,
+              distance: enterDistance,
+              ...(swept ? { swept: true } : {}),
+            });
+          } else if (pointInside && !state.blockedApproach) {
+            // At the zone, and refused. Reported once per approach — and only
+            // for a hand that is actually there, so a swept-through refusal is
+            // under-reported rather than double-counted.
             state.blockedApproach = true;
             const reason: BlockReason = pastRefractory ? 'visibility' : 'refractory';
             this.blocked[reason] += 1;
@@ -225,6 +298,17 @@ export class ZoneTracker {
         }
 
         this.state.set(key, state);
+      }
+    }
+
+    // Remember trusted positions only. Sweeping from a position the model was
+    // unsure of would invent a path the hand never took.
+    for (const limb of INPUT_LIMBS) {
+      const point = snapshot.landmarks[limb];
+      if (this.isTrusted(point)) {
+        this.previous.set(limb, { x: point.x, y: point.y, timestampMs: now });
+      } else {
+        this.previous.delete(limb);
       }
     }
 

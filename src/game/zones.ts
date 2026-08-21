@@ -71,6 +71,51 @@ export function distanceToZone(
   return Math.hypot(dx, dy);
 }
 
+export interface SegmentHit {
+  /** Closest approach of the swept path to the zone centre, in field-X units. */
+  distance: number;
+  /** Where along the path that happened. 0 = start, 1 = end. */
+  t: number;
+}
+
+/**
+ * Closest approach of a MOVING landmark to a zone.
+ *
+ * Testing where a wrist *is* misses where it *went*. Pose arrives at roughly
+ * 26–30 Hz, so consecutive samples are ~35 ms apart, and a fast arm extension
+ * covers real distance in that time — easily more than a zone's diameter. The
+ * hand passes clean through the target and every sampled position is outside
+ * it, so a hit that visibly happened never registers.
+ *
+ * Sweeping the segment between the previous and current sample fixes that, and
+ * `t` additionally says WHEN along the path the closest approach occurred,
+ * which lets the entry be timestamped by interpolation rather than rounded up
+ * to the frame that noticed it.
+ */
+export function sweptDistanceToZone(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  zone: Zone,
+  aspect: number,
+): SegmentHit {
+  // Work in aspect-corrected space so "closest" means closest on screen.
+  const ax = from.x - zone.cx;
+  const ay = (from.y - zone.cy) / aspect;
+  const bx = to.x - zone.cx;
+  const by = (to.y - zone.cy) / aspect;
+
+  const vx = bx - ax;
+  const vy = by - ay;
+  const lengthSq = vx * vx + vy * vy;
+
+  // No movement between samples: the segment collapses to a point.
+  if (lengthSq === 0) return { distance: Math.hypot(ax, ay), t: 1 };
+
+  const raw = -(ax * vx + ay * vy) / lengthSq;
+  const t = Math.min(1, Math.max(0, raw));
+  return { distance: Math.hypot(ax + t * vx, ay + t * vy), t };
+}
+
 /**
  * Is this landmark inside the zone right now?
  *

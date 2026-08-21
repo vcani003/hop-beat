@@ -63,6 +63,68 @@ export async function startCamera(deviceId?: string): Promise<CameraInfo> {
   };
 }
 
+/**
+ * Attach a stream to a video element and wait until it is genuinely producing
+ * frames.
+ *
+ * Two separate failures hide here, and neither reports itself:
+ *
+ *   `video.play()` REJECTS under autoplay policy — recoverable, and worth
+ *   saying so.
+ *
+ *   `video.play()` NEVER SETTLES when the stream yields no frames at all — a
+ *   camera that opened but is covered, asleep, or claimed by something else.
+ *   Awaiting it outright leaves the app on "starting…" forever.
+ *
+ * So play() is raced against a deadline, and readiness is then confirmed by
+ * the element actually having dimensions rather than by play() having resolved.
+ */
+export async function attachStream(
+  video: HTMLVideoElement,
+  stream: MediaStream,
+  timeoutMs = 8000,
+): Promise<void> {
+  video.srcObject = stream;
+
+  const deadline = new Promise<never>((_, reject) =>
+    setTimeout(
+      () =>
+        reject(
+          new CameraError(
+            'The camera opened but never sent a picture.',
+            'Something else may be holding it, or the lens cover is closed. Close other apps using the webcam and try again.',
+          ),
+        ),
+      timeoutMs,
+    ),
+  );
+
+  try {
+    await Promise.race([video.play(), deadline]);
+  } catch (err) {
+    if (err instanceof CameraError) throw err;
+    throw new CameraError(
+      'The browser refused to start the camera preview.',
+      'Autoplay may be blocked — interact with the page once, then try again.',
+    );
+  }
+
+  // play() resolving does not guarantee a decoded frame exists yet, and
+  // MediaPipe cannot run against a zero-sized video.
+  if (video.videoWidth === 0) {
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        const check = () => {
+          if (video.videoWidth > 0) resolve();
+          else requestAnimationFrame(check);
+        };
+        check();
+      }),
+      deadline,
+    ]);
+  }
+}
+
 export function stopCamera(stream: MediaStream): void {
   for (const track of stream.getTracks()) track.stop();
 }

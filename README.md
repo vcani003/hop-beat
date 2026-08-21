@@ -61,7 +61,8 @@ MVP 0 is the only assignment until it is met and reviewed.
   wrist-entry events. No music, no scoring, no art. **Done** — exit criterion met
   on a real webcam; see [`docs/DECISIONS.md`](docs/DECISIONS.md).
 - **MVP 1 — make it a rhythm game.** One track, one hand-authored map,
-  authoritative clock, judgment and scoring.
+  authoritative clock, judgment and scoring. **Built** — awaiting a full song
+  played end to end.
 - **MVP 2 — generate a map.** Offline analysis, then a choreography generator
   that turns musical events into playable movement.
 - **MVP 3 — YouTube playback.** Official IFrame player as the clock source.
@@ -73,10 +74,16 @@ MVP 0 is the only assignment until it is met and reviewed.
 ```
 src/
   pose/         camera, MediaPipe provider, coordinate transforms
-  game/         zone geometry and the zone-entry state machine
-  debug/        canvas renderer and telemetry
-  ui/           React panel and HUD
-tests/          pure-logic tests; no webcam required
+  game/         zones, the zone-entry state machine, field calibration
+    engine/     clock, judgment, scoring, the game loop's core
+    maps/       beatmap schema, validator, hand-authored patterns
+  playback/     click track, local audio; YouTube slots in at MVP 3
+  render/pixi/  the PixiJS game renderer
+  debug/        MVP 0's canvas renderer, telemetry, session recording
+  spec/         progress against the spec, rendered at /#/spec
+  ui/           React screens, HUD, controls
+maps/fixtures/  hand-authored charts
+tests/          pure-logic tests; no webcam and no audio required
 scripts/
   fetch-assets.mjs        vendors the MediaPipe runtime and models
 docs/

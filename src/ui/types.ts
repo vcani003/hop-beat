@@ -14,6 +14,13 @@ export interface Settings {
   exitGraceMs: number;
   refractoryMs: number;
   requireInFrame: boolean;
+  /** Test the path between pose samples, not just the samples. */
+  sweptCollision: boolean;
+  /**
+   * Added to playback time before judging. Spec §7 asks for calibration to be
+   * first class once basic gameplay works.
+   */
+  audioOffsetMs: number;
 }
 
 /**
@@ -41,6 +48,8 @@ export const DEFAULT_SETTINGS: Settings = {
   exitGraceMs: 40,
   refractoryMs: 20,
   requireInFrame: true,
+  sweptCollision: true,
+  audioOffsetMs: 0,
 };
 
 /** A 5 Hz snapshot of the hot loop, safe to hand to React. */

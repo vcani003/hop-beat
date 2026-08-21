@@ -20,10 +20,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MediaPipePoseProvider, type PoseFrame } from './pose/MediaPipePoseProvider.ts';
-import { CameraError, startCamera, stopCamera, type CameraInfo } from './pose/camera.ts';
+import { attachStream, CameraError, startCamera, stopCamera, type CameraInfo } from './pose/camera.ts';
 import type { PoseSnapshot } from './pose/poseTypes.ts';
 import { defaultZones, type Zone } from './game/zones.ts';
-import { ZoneTracker } from './game/ZoneTracker.ts';
+import { DEFAULT_TRACKER_CONFIG, ZoneTracker } from './game/ZoneTracker.ts';
 import { drawScene, isFlashAlive, resizeCanvas, type HitFlash } from './debug/DebugCanvas.ts';
 import { RateCounter, RollingStat } from './debug/telemetry.ts';
 import {
@@ -104,6 +104,8 @@ export default function App() {
       exitGraceMs: settings.exitGraceMs,
       refractoryMs: settings.refractoryMs,
       requireInFrame: settings.requireInFrame,
+      sweptCollision: settings.sweptCollision,
+      maxSweepGapMs: DEFAULT_TRACKER_CONFIG.maxSweepGapMs,
     });
     providerRef.current?.setMirrored(settings.mirrored);
   }, [settings]);
@@ -259,8 +261,7 @@ export default function App() {
       cameraRef.current = camera;
 
       const video = videoRef.current!;
-      video.srcObject = camera.stream;
-      await video.play();
+      await attachStream(video, camera.stream);
 
       const provider = await MediaPipePoseProvider.create({
         modelVariant: settingsRef.current.modelVariant,
@@ -460,6 +461,10 @@ export default function App() {
       <div className="panel">
         <button onClick={live ? stop : start} disabled={status === 'loading'}>
           {status === 'loading' ? 'Loading…' : live ? 'Stop' : 'Start camera'}
+        </button>
+
+        <button className="button--quiet" onClick={() => navigate('/')}>
+          ← Back to the game
         </button>
 
         <button className="button--quiet" onClick={() => navigate('/spec')}>

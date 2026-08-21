@@ -509,3 +509,180 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   font-size: 0.78rem;
   color: var(--muted);
 }
+
+/* ---- play screen ---- */
+
+.play {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  height: 100%;
+  gap: 1px;
+  background: var(--line);
+}
+
+@media (max-width: 900px) {
+  .play { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+}
+
+.play__stage {
+  position: relative;
+  background: #000;
+  overflow: hidden;
+}
+
+.play__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.play__hud {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-shadow: 0 2px 14px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
+.play__score { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.play__combo { font-size: 1.5rem; font-weight: 700; color: var(--pink); line-height: 1.1; }
+.play__combo span { font-size: 0.9rem; opacity: 0.7; }
+.play__accuracy { font-size: 0.85rem; color: var(--muted); }
+
+.play__progress {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: rgba(255,255,255,0.1);
+}
+.play__progressfill { height: 100%; background: var(--violet); }
+
+.play__pause {
+  position: absolute;
+  top: 16px; right: 16px;
+  width: auto;
+  padding: 7px 12px;
+  background: rgba(10,10,16,0.65);
+  backdrop-filter: blur(6px);
+  font-size: 11px;
+}
+
+.play__overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8,8,12,0.86);
+  backdrop-filter: blur(10px);
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.play__panel {
+  width: min(30rem, 100%);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.play__panel h1, .play__panel h2 { margin: 0; }
+.play__panel h2 { font-size: 1.4rem; }
+.play__songtitle { font-size: 1.05rem; font-weight: 600; margin: 0.4rem 0 0; }
+.play__hint { color: var(--muted); font-size: 0.82rem; line-height: 1.6; margin: 0; }
+.play__links { display: flex; gap: 0.5rem; justify-content: center; margin-top: 0.4rem; }
+.play__links button { width: auto; border-color: transparent; font-size: 11px; }
+
+.play__side {
+  background: var(--panel);
+  padding: 14px;
+  overflow-y: auto;
+}
+
+/* ---- results ---- */
+
+.results__label { font-size: 0.65rem; letter-spacing: 0.2em; color: var(--muted); margin: 0; }
+.results__grade {
+  font-size: 5rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, var(--violet), var(--pink));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.results__score { font-size: 1.9rem; font-weight: 700; }
+
+.results__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0.8rem 0;
+}
+.results__grid > div {
+  background: var(--panel);
+  padding: 0.7rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.results__k { font-size: 0.58rem; letter-spacing: 0.1em; color: var(--muted); }
+.results__v { font-size: 1.1rem; font-weight: 700; }
+
+/* ---- song select ---- */
+
+.songselect {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0.6rem 0;
+  text-align: left;
+}
+
+.songselect__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  padding: 9px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+.songselect__item.is-active {
+  border-color: var(--violet);
+  background: rgba(139, 92, 246, 0.12);
+}
+.songselect__title { font-size: 0.85rem; font-weight: 600; }
+.songselect__meta { font-size: 0.68rem; color: var(--muted); font-weight: 400; }
+
+.tempofix {
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.tempofix__row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.tempofix__row button { padding: 5px; font-size: 11px; }
+
+.calbar {
+  height: 4px;
+  border-radius: 100px;
+  background: rgba(255,255,255,0.1);
+  overflow: hidden;
+  margin-top: 0.6rem;
+}
+.calbar__fill {
+  height: 100%;
+  background: var(--violet);
+  animation: calfill 1.6s linear forwards;
+}
+@keyframes calfill { from { width: 0%; } to { width: 100%; } }

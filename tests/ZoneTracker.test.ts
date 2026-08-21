@@ -289,3 +289,84 @@ describe('ZoneTracker — blocked hits are observable, not merely suspected', ()
     expect(tracker.blockedCounts()).toEqual({ refractory: 0, visibility: 0 });
   });
 });
+
+describe('ZoneTracker — swept collision catches a hand that moves between frames', () => {
+  // Far enough outside the 0.1 radius to be a genuine miss on both samples,
+  // but still inside the camera frame — ZONE.cx is 0.2, so a larger offset
+  // would put x below zero and be rejected as extrapolated before sweeping
+  // ever ran.
+  const FAR = 0.19;
+
+  /**
+   * The reported symptom: "sometimes I hit the beat but it doesn't register",
+   * and "I extend my arm to reach and it doesn't always reach".
+   *
+   * At a 26–30 Hz pose rate samples are ~35 ms apart. A fast arm extension can
+   * cross a zone's whole diameter inside one gap, so every SAMPLED position is
+   * outside the zone even though the hand visibly went through it.
+   */
+  it('registers a hit that no individual sample was inside', () => {
+    const tracker = new ZoneTracker(config({ sweptCollision: true }));
+    // Frame 1: well to the left of the zone. Frame 2: well past it. Neither
+    // sample is within the 0.1 radius, but the straight path crosses dead
+    // centre.
+    tracker.update(snapshot(0, { leftWrist: at(-FAR) }), ZONES, ASPECT);
+    const events = tracker.update(snapshot(35, { leftWrist: at(FAR) }), ZONES, ASPECT);
+
+    expect(events.map((e) => e.type)).toEqual(['ZONE_ENTER']);
+    expect(events[0].swept).toBe(true);
+  });
+
+  it('misses it entirely when sweeping is disabled', () => {
+    const tracker = new ZoneTracker(config({ sweptCollision: false }));
+    tracker.update(snapshot(0, { leftWrist: at(-FAR) }), ZONES, ASPECT);
+    expect(tracker.update(snapshot(35, { leftWrist: at(FAR) }), ZONES, ASPECT)).toEqual([]);
+  });
+
+  /**
+   * And the accuracy win that comes with it: the hand reached the zone partway
+   * between two frames, so the entry is timestamped by interpolation rather
+   * than rounded up to the frame that noticed. Worth up to a full frame — ~35
+   * ms — against an ±80 ms PERFECT window.
+   */
+  it('timestamps the crossing by interpolation, not by the frame that saw it', () => {
+    const tracker = new ZoneTracker(config({ sweptCollision: true }));
+    tracker.update(snapshot(0, { leftWrist: at(-FAR) }), ZONES, ASPECT);
+    const [event] = tracker.update(snapshot(40, { leftWrist: at(FAR) }), ZONES, ASPECT);
+
+    // Centre is halfway along the path, so halfway through the gap.
+    expect(event.timestampMs).toBeCloseTo(20, 0);
+    expect(event.timestampMs).toBeLessThan(40);
+  });
+
+  it('does not sweep from a stale sample', () => {
+    const tracker = new ZoneTracker(config({ sweptCollision: true, maxSweepGapMs: 120 }));
+    tracker.update(snapshot(0, { leftWrist: at(-FAR) }), ZONES, ASPECT);
+    // Half a second later: whatever path the hand took, it was not this one.
+    expect(tracker.update(snapshot(500, { leftWrist: at(FAR) }), ZONES, ASPECT)).toEqual([]);
+  });
+
+  it('does not sweep from a position the model did not trust', () => {
+    const tracker = new ZoneTracker(config({ sweptCollision: true, minVisibility: 0.5 }));
+    tracker.update(snapshot(0, { leftWrist: at(-FAR, 0.1) }), ZONES, ASPECT);
+    expect(tracker.update(snapshot(35, { leftWrist: at(FAR) }), ZONES, ASPECT)).toEqual([]);
+  });
+
+  it('does not invent a hit from a path that passes the zone by', () => {
+    const tracker = new ZoneTracker(config({ sweptCollision: true }));
+    // A horizontal sweep well below the zone: never within the radius.
+    const below = (offset: number) => ({ x: ZONE.cx + offset, y: ZONE.cy + 0.4, visibility: 1 });
+    tracker.update(snapshot(0, { leftWrist: below(-FAR) }), ZONES, ASPECT);
+    expect(tracker.update(snapshot(35, { leftWrist: below(FAR) }), ZONES, ASPECT)).toEqual([]);
+  });
+
+  it('still emits exactly one enter for a hand that arrives and stays', () => {
+    const tracker = new ZoneTracker(config({ sweptCollision: true }));
+    tracker.update(snapshot(0, { leftWrist: at(-FAR) }), ZONES, ASPECT);
+    const first = tracker.update(snapshot(35, { leftWrist: at(0) }), ZONES, ASPECT);
+    expect(first.map((e) => e.type)).toEqual(['ZONE_ENTER']);
+    for (let t = 70; t < 400; t += 35) {
+      expect(tracker.update(snapshot(t, { leftWrist: at(0) }), ZONES, ASPECT)).toEqual([]);
+    }
+  });
+});

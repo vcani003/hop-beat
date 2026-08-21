@@ -80,13 +80,13 @@ export const MILESTONES: Milestone[] = [
       'One full song is playable from start to finish with understandable timing feedback and repeatable scoring.',
     exitMet: false,
     tasks: [
-      { title: 'Use one legally usable/local development track', status: 'todo', note: 'Spec §11: not charging for something does not make a recording free to use' },
-      { title: 'Create one manually authored JSON beatmap first', status: 'todo' },
-      { title: 'Implement playback adapter and authoritative clock', status: 'todo', note: 'The playback clock is authoritative — not the renderer, not the pose frame rate' },
-      { title: 'Spawn/schedule notes against timestamps', status: 'todo' },
-      { title: 'Implement PERFECT / GOOD / MISS and combo/score', status: 'todo', note: 'Starting windows ±80 / ±160 ms, tunable — MVP 0 measured ~28 ms of input latency to fit inside them' },
-      { title: 'Create start, pause, calibration placeholder, play and results states', status: 'todo' },
-      { title: 'Add simple PixiJS targets and procedural player visualization', status: 'todo', note: 'First point at which a GPU renderer earns its place' },
+      { title: 'Use one legally usable/local development track', status: 'done', note: 'A click track we synthesise ourselves, plus the player\u2019s own audio loaded at runtime and never committed' },
+      { title: 'Create one manually authored JSON beatmap first', status: 'done', note: 'maps/fixtures/click-120-warmup.json — 54 notes, hand-written' },
+      { title: 'Implement playback adapter and authoritative clock', status: 'done', note: 'Interpolated, with minimum-drift bias correction; YouTube slots in behind the same interface at MVP 3' },
+      { title: 'Spawn/schedule notes against timestamps', status: 'done', note: 'Approach rings converge on their target at the note\u2019s time' },
+      { title: 'Implement PERFECT / GOOD / MISS and combo/score', status: 'done', note: '±80 / ±160 ms, judged at the camera-frame time the input actually happened' },
+      { title: 'Create start, pause, calibration, play and results states', status: 'done', note: 'Calibration is real rather than a placeholder — it fits the play field to the player\u2019s reach' },
+      { title: 'Add simple PixiJS targets and procedural player visualization', status: 'done', note: 'Approach rings, skeleton, wrist trails, judgment ripples' },
     ],
   },
   {
@@ -180,6 +180,10 @@ export const OPEN_QUESTIONS: OpenQuestion[] = [
   {
     number: 4,
     question: 'Should notes require zone entry, dwell, velocity, or directional crossing?',
+    answer: 'Entry — but of the PATH between pose samples, not of the sampled positions.',
+    evidence:
+      'At 26–30 Hz a fast arm extension crosses a whole zone between two samples, so testing sampled positions alone drops hits that visibly happened. Sweeping the segment also lets the crossing be timestamped by interpolation.',
+    partial: true,
   },
   {
     number: 5,
@@ -269,6 +273,30 @@ export const DECISIONS: DecisionEntry[] = [
     title: 'Model and delegate are interchangeable on this hardware',
     summary:
       'Every combination finishes inside the frame budget, so the difference lands in slack rather than in felt latency. Choose for landmark quality.',
+  },
+  {
+    number: 11,
+    title: 'A synthesised click track is the MVP 1 development track',
+    summary:
+      'A metronome we generate needs no licence review and has a tempo we know exactly, so a chart can be checked by ear with no analysis step. AudioContext.currentTime is also the most accurate clock available in a browser.',
+  },
+  {
+    number: 12,
+    title: 'The clock corrects bias by minimum drift, not by average drift',
+    summary:
+      'Starting an audio context leaves a constant lead that can sit under the resync threshold forever. Correcting toward the MEAN would instead invent a lag on any source that reports coarsely; the minimum measures real bias and ignores coarseness.',
+  },
+  {
+    number: 13,
+    title: 'Collision sweeps the path between pose samples',
+    summary:
+      'A hand moving fast crosses a zone entirely between two frames, so every sampled position is outside a target it visibly hit. Sweeping the segment fixes that and dates the crossing by interpolation.',
+  },
+  {
+    number: 14,
+    title: 'The play field is fitted to the player before each song',
+    summary:
+      'Screen-anchored targets assume the player\u2019s reach covers the frame, and it does not — an unreachable corner reads as a tracking failure when nothing is wrong. Zones are placed inside a box derived from shoulder width, then frozen for the song.',
   },
 ];
 

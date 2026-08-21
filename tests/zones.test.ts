@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { defaultZones, distanceToZone, isInsideZone, ZONE_IDS, type Zone } from '../src/game/zones.ts';
+import {
+  defaultZones,
+  distanceToZone,
+  isInsideZone,
+  sweptDistanceToZone,
+  ZONE_IDS,
+  type Zone,
+} from '../src/game/zones.ts';
 
 const zone = (over: Partial<Zone> = {}): Zone => ({
   id: 'upperLeft',
@@ -95,5 +102,39 @@ describe('defaultZones', () => {
         expect(gap).toBeGreaterThan((a.radius + b.radius) * 1.3);
       }
     }
+  });
+});
+
+describe('sweptDistanceToZone', () => {
+  const p = (x: number, y: number) => ({ x, y });
+
+  it('collapses to point distance when nothing moved', () => {
+    const hit = sweptDistanceToZone(p(0.8, 0.5), p(0.8, 0.5), zone(), 1);
+    expect(hit.distance).toBeCloseTo(0.3);
+    expect(hit.t).toBe(1);
+  });
+
+  it('finds the centre crossing of a path that passes through', () => {
+    const hit = sweptDistanceToZone(p(0.2, 0.5), p(0.8, 0.5), zone(), 1);
+    expect(hit.distance).toBeCloseTo(0);
+    expect(hit.t).toBeCloseTo(0.5);
+  });
+
+  it('reports where along the path the closest approach happened', () => {
+    const hit = sweptDistanceToZone(p(0.5, 0.5), p(1.0, 0.5), zone(), 1);
+    expect(hit.t).toBeCloseTo(0); // it starts at the centre and leaves
+  });
+
+  it('never reports a point beyond the ends of the segment', () => {
+    // The centre is behind the start, so the closest reachable point is t=0.
+    const hit = sweptDistanceToZone(p(0.6, 0.5), p(0.9, 0.5), zone(), 1);
+    expect(hit.t).toBe(0);
+    expect(hit.distance).toBeCloseTo(0.1);
+  });
+
+  it('applies aspect correction like the point-distance test does', () => {
+    const aspect = 16 / 9;
+    const still = sweptDistanceToZone(p(0.5, 0.6), p(0.5, 0.6), zone(), aspect);
+    expect(still.distance).toBeCloseTo(distanceToZone(p(0.5, 0.6), zone(), aspect));
   });
 });

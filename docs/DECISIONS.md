@@ -201,6 +201,96 @@ Also answered along the way, spec §20 #9 — *does showing the webcam improve
 playability?* No. The skeleton alone is enough to play by, and the camera feed
 is off by default.
 
+
+---
+
+## MVP 1
+
+### 11. A synthesised click track is the MVP 1 development track
+
+Spec §15 asks MVP 1 for "one legally usable/local development track", and §11
+is firm that not charging for something does not make a recording free to use.
+
+A metronome we generate ourselves settles that question by not raising it, and
+is useful beyond the licence: its tempo is known exactly, so a hand-written
+chart can be verified by ear with no analysis step in between.
+
+It is also the most accurate clock available in a browser.
+`AudioContext.currentTime` is driven by the audio hardware rather than the main
+thread, so it keeps correct time while JavaScript is busy. Measured here: 805 ms
+of audio per 805 ms of wall clock, zero resyncs.
+
+The player's own audio is supported through `LocalAudioAdapter` and lives in
+`public/audio/`, which is **gitignored** — no recording is committed.
+
+### 12. The clock corrects bias by minimum drift, not by average drift
+
+Measured on a real click track: the interpolated clock sat a constant **36 ms**
+ahead of the audio, and because that was under the 40 ms resync threshold it
+would have stayed there for the whole song. Against an ±80 ms PERFECT window
+that is nearly half the budget, spent before any judgment logic runs.
+
+The obvious fix — nudge toward the average drift — is wrong. A source that
+reports its position in 30 ms steps makes drift sawtooth between 0 and +30; its
+mean is +15 even though the interpolated clock is exactly right, so correcting
+toward it would invent a 15 ms lag.
+
+The **minimum** drift over a window does not have that problem. For a merely
+coarse source it sits at zero and nothing is corrected; for a source we are
+genuinely ahead of, every sample including the smallest carries the bias. Bias
+is then bled off 5% per tick, which converges in well under a second and is
+invisible to a player.
+
+### 13. Collision sweeps the path between pose samples
+
+Reported symptom: *"sometimes I'll hit the beat but it doesn't register"*, and
+*"I extend my arm to reach and it doesn't always reach"*.
+
+Neither is a tracking failure. At a 26–30 Hz pose rate, samples are ~35 ms
+apart, and a fast arm extension covers more than a zone's diameter in that gap.
+The hand passes clean through the target while every sampled position is
+outside it.
+
+`ZoneTracker` now tests the segment between consecutive trusted samples. Two
+things follow: hits that were previously invisible register, and the crossing
+can be dated by interpolation rather than rounded up to the frame that noticed
+it — worth up to a full frame of timing accuracy.
+
+The bookkeeping that decides whether one approach is still under way stays on
+the CURRENT point. Using the swept answer there would keep an approach alive
+while the hand withdrew back through the zone, and count two attempts as one.
+
+### 14. The play field is fitted to the player before each song
+
+Reported symptom: *"even though I'm far back enough I have trouble hitting the
+bottom right"*.
+
+Spec §3 anchors targets to stable normalised screen coordinates, which is right
+— a target that moves is a target you cannot learn. But it assumes the player's
+reach covers the frame, and where you stand, how tall you are and how wide the
+lens is all decide whether it does. An unreachable corner reads as the tracker
+failing when nothing is wrong with it.
+
+Before each song the player is watched for 1.6 s and the four zones are placed
+inside a box derived from **shoulder width**, which is a reliable proxy for arm
+length and needs no reach test. The fit is then frozen, so targets remain
+screen-anchored while playing.
+
+Medians, not means: one frame with a misplaced shoulder would otherwise drag
+the whole field.
+
+This replaces the "calibration placeholder" §15 asks for with the real thing.
+
+---
+
+## MVP 1 exit criterion
+
+> One full song is playable from start to finish with understandable timing
+> feedback and repeatable scoring. — Spec §15
+
+**Not yet signed off.** Every task is built; the criterion needs a full song
+played end to end.
+
 ---
 
 ## Open after MVP 0

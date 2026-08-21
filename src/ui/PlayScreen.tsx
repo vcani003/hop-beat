@@ -72,6 +72,12 @@ export default function PlayScreen() {
   const [trackId, setTrackId] = useState<string>('warmup');
   const [grid, setGrid] = useState<{ bpm: number; firstBeatMs: number } | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
+  /**
+   * Kept separate from fatalError because it must be visible DURING play. A
+   * renderer that fails leaves the engine running and the screen empty, which
+   * is the most confusing possible failure to hit in silence.
+   */
+  const [rendererError, setRendererError] = useState<string | null>(null);
 
   const track: LocalTrack | undefined = LOCAL_TRACKS.find((t) => t.id === trackId);
 
@@ -104,7 +110,7 @@ export default function PlayScreen() {
     rebuildZones();
   }, [rebuildZones]);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<GameRenderer | null>(null);
   const adapterRef = useRef<PlaybackAdapter | null>(null);
   const clockRef = useRef<GameClock | null>(null);
@@ -153,11 +159,11 @@ export default function PlayScreen() {
   useEffect(() => {
     let cancelled = false;
     const renderer = new GameRenderer();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = stageRef.current;
+    if (!container) return;
 
     renderer
-      .init(canvas)
+      .init(container)
       .then(() => {
         if (cancelled) {
           renderer.destroy();
@@ -166,8 +172,10 @@ export default function PlayScreen() {
         rendererRef.current = renderer;
       })
       .catch((err: unknown) => {
-        setFatalError(
-          err instanceof Error ? err.message : 'The WebGL renderer failed to start.',
+        setRendererError(
+          err instanceof Error
+            ? `The graphics renderer failed to start: ${err.message}`
+            : 'The graphics renderer failed to start.',
         );
       });
 
@@ -374,7 +382,7 @@ export default function PlayScreen() {
 
   return (
     <div className="play">
-      <div className="play__stage">
+      <div className="play__stage" ref={stageRef}>
         <video
           ref={videoRef}
           className={[
@@ -385,7 +393,13 @@ export default function PlayScreen() {
           playsInline
           muted
         />
-        <canvas ref={canvasRef} className="play__canvas" />
+        {rendererError && (
+          <div className="play__rendererror">
+            {rendererError}
+            <br />
+            Reload the page — this is usually a lost WebGL context.
+          </div>
+        )}
 
         {live && (
           <>

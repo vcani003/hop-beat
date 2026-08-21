@@ -47,6 +47,14 @@ const REACH_DOWN_IN_SHOULDERS = 1.05;
 /** Below this the pose is too uncertain to calibrate from. */
 const MIN_VISIBILITY = 0.5;
 
+/**
+ * Torso length as a multiple of shoulder width, used when the hips cannot be
+ * seen. Roughly true across adult body types, and far better than refusing to
+ * calibrate — a player whose hips sit at the edge of frame is exactly the
+ * player who most needs the field fitted to them.
+ */
+const TORSO_IN_SHOULDERS = 1.5;
+
 const median = (values: number[]): number => {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -79,23 +87,29 @@ export function calibrationFromPose(
     const rs = snapshot.landmarks.rightShoulder;
     const lh = snapshot.landmarks.leftHip;
     const rh = snapshot.landmarks.rightHip;
-    if (
-      ls.visibility < MIN_VISIBILITY ||
-      rs.visibility < MIN_VISIBILITY ||
-      lh.visibility < MIN_VISIBILITY ||
-      rh.visibility < MIN_VISIBILITY
-    ) {
-      continue;
-    }
+
+    // Shoulders are required: they supply both the centre and the scale.
+    if (ls.visibility < MIN_VISIBILITY || rs.visibility < MIN_VISIBILITY) continue;
 
     const width = Math.abs(ls.x - rs.x);
     // A shoulder width near zero means the player is edge-on or the model has
     // collapsed the two points together; either way it is not a scale.
     if (width < 0.02) continue;
 
+    const shoulderY = (ls.y + rs.y) / 2;
+
+    // Hips are preferred but optional. Refusing to calibrate without them
+    // penalises exactly the player who needs it most — someone standing close
+    // enough that their lower body is out of shot.
+    const hipsVisible = lh.visibility >= MIN_VISIBILITY && rh.visibility >= MIN_VISIBILITY;
+
     centresX.push((ls.x + rs.x) / 2);
-    shoulderYs.push((ls.y + rs.y) / 2);
-    hipYs.push((lh.y + rh.y) / 2);
+    shoulderYs.push(shoulderY);
+    hipYs.push(
+      hipsVisible
+        ? (lh.y + rh.y) / 2
+        : shoulderY + (width * TORSO_IN_SHOULDERS) / aspect,
+    );
     widths.push(width);
   }
 
@@ -152,7 +166,9 @@ function clamp01(value: number): number {
 
 /** A short, human-readable description for the calibration UI. */
 export function describeCalibration(calibration: FieldCalibration | null): string {
-  if (!calibration) return 'not calibrated — using the default layout';
+  if (!calibration) {
+    return 'not fitted — step back until your shoulders are clearly in frame, then re-fit';
+  }
   const widthPct = (calibration.halfWidth * 2 * 100).toFixed(0);
-  return `field fitted to ${widthPct}% of frame width, centred on you`;
+  return `fitted to you — targets span ${widthPct}% of the frame`;
 }

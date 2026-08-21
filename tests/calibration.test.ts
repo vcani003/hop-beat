@@ -118,11 +118,62 @@ describe('applyCalibration', () => {
 
 describe('describeCalibration', () => {
   it('says so plainly when uncalibrated', () => {
-    expect(describeCalibration(null)).toMatch(/not calibrated/);
+    expect(describeCalibration(null)).toMatch(/not fitted/);
   });
 
   it('reports the fitted width', () => {
     const cal = calibrationFromPose([standing(0)], ASPECT)!;
-    expect(describeCalibration(cal)).toMatch(/% of frame width/);
+    expect(describeCalibration(cal)).toMatch(/targets span \d+% of the frame/);
+  });
+});
+
+describe('calibrationFromPose — working from shoulders alone', () => {
+  /** Someone standing close enough that their hips are out of shot. */
+  const upperBodyOnly = (timestampMs: number, { centreX = 0.5, shoulderWidth = 0.22 } = {}) =>
+    snapshot(timestampMs, {
+      leftShoulder: { x: centreX - shoulderWidth / 2, y: 0.4, visibility: 1 },
+      rightShoulder: { x: centreX + shoulderWidth / 2, y: 0.4, visibility: 1 },
+      leftHip: { x: centreX - 0.06, y: 0.95, visibility: 0.1 },
+      rightHip: { x: centreX + 0.06, y: 0.95, visibility: 0.1 },
+    });
+
+  /**
+   * Refusing to calibrate without hips penalises exactly the player who needs
+   * it most: someone close to the camera, whose reachable field is least like
+   * the default layout.
+   */
+  it('still fits a field when the hips are not visible', () => {
+    const cal = calibrationFromPose([upperBodyOnly(0)], ASPECT);
+    expect(cal).not.toBeNull();
+    expect(cal!.centreX).toBeCloseTo(0.5);
+    expect(cal!.halfHeight).toBeGreaterThan(0);
+  });
+
+  it('estimates a torso rather than collapsing the field to nothing', () => {
+    const cal = calibrationFromPose([upperBodyOnly(0, { shoulderWidth: 0.22 })], ASPECT)!;
+    // Shoulder-derived torso puts the centre below the shoulders at y 0.4.
+    expect(cal.centreY).toBeGreaterThan(0.4);
+  });
+
+  it('still refuses when the shoulders themselves are not visible', () => {
+    const noShoulders = snapshot(0, {
+      leftShoulder: { x: 0.4, y: 0.4, visibility: 0.1 },
+      rightShoulder: { x: 0.6, y: 0.4, visibility: 0.1 },
+      leftHip: { x: 0.45, y: 0.7, visibility: 1 },
+      rightHip: { x: 0.55, y: 0.7, visibility: 1 },
+    });
+    expect(calibrationFromPose([noShoulders], ASPECT)).toBeNull();
+  });
+
+  it('prefers real hips over the estimate when both are available', () => {
+    const withHips = standing(0, { shoulderWidth: 0.22, shoulderY: 0.4, hipY: 0.9 });
+    const withoutHips = upperBodyOnly(0, { shoulderWidth: 0.22 });
+    const a = calibrationFromPose([withHips], ASPECT)!;
+    const b = calibrationFromPose([withoutHips], ASPECT)!;
+    expect(a.centreY).not.toBeCloseTo(b.centreY, 2);
+  });
+
+  it('tells the player what to do when it cannot fit a field', () => {
+    expect(describeCalibration(null)).toMatch(/shoulders/);
   });
 });

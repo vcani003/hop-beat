@@ -686,3 +686,20 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   animation: calfill 1.6s linear forwards;
 }
 @keyframes calfill { from { width: 0%; } to { width: 100%; } }
+
+.play__rendererror {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 26rem;
+  text-align: center;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--bad);
+  background: rgba(10, 10, 16, 0.9);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  z-index: 5;
+}

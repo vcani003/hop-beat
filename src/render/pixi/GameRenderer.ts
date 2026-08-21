@@ -85,11 +85,23 @@ export class GameRenderer {
   private width = 0;
   private height = 0;
 
-  async init(canvas: HTMLCanvasElement): Promise<void> {
+  /**
+   * Build the renderer inside a container element.
+   *
+   * PixiJS creates its OWN canvas here rather than being handed one, and that
+   * is load-bearing. React StrictMode mounts every effect twice: the first
+   * Application begins initialising, is cancelled, and destroys itself — and
+   * if both were pointed at the same <canvas>, that teardown takes the WebGL
+   * context out from under the second one. The symptom is a game that runs
+   * perfectly while drawing nothing at all.
+   *
+   * Giving each Application its own canvas makes the two instances genuinely
+   * independent, so cleaning up the first cannot touch the second.
+   */
+  async init(container: HTMLElement): Promise<void> {
     const app = new Application();
     await app.init({
-      canvas,
-      resizeTo: canvas.parentElement ?? undefined,
+      resizeTo: container,
       backgroundAlpha: 0, // the webcam or the page shows through
       antialias: true,
       // Capping DPR keeps a 5K display from quietly tripling fill cost. Spec
@@ -97,6 +109,9 @@ export class GameRenderer {
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
     });
+
+    app.canvas.className = 'play__canvas';
+    container.appendChild(app.canvas);
 
     app.stage.addChild(this.zoneLayer, this.noteLayer, this.playerLayer, this.effectLayer);
     this.zoneLayer.addChild(this.zoneGraphics);
@@ -314,7 +329,14 @@ export class GameRenderer {
 
   destroy(): void {
     this.clearEffects();
-    this.app?.destroy(false, { children: true });
+    // `true` removes the canvas this Application created, so a cancelled
+    // StrictMode instance leaves nothing behind for the live one to trip over.
+    this.app?.destroy(true, { children: true });
     this.app = null;
+  }
+
+  /** True once a WebGL context exists and drawing will actually appear. */
+  isReady(): boolean {
+    return this.app !== null;
   }
 }

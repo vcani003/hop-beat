@@ -1,0 +1,61 @@
+# Build and publish to GitHub Pages.
+#
+# The tracking assets are gitignored — roughly 50 MB of WebAssembly and model
+# files that are derived, not authored. They are fetched here instead, in the
+# minimal form a deployed build actually loads, so nothing large ever enters
+# the repository.
+#
+# Music is NOT fetched and never will be: spec §11 says store the derived
+# beatmap, not the recording. A published build ships the click track only.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # --ignore-scripts skips the postinstall vendoring so it can be run
+      # explicitly below with the minimal flag.
+      - run: npm ci --ignore-scripts
+
+      - run: node scripts/fetch-assets.mjs --minimal
+
+      - run: npm test
+
+      - run: npm run build
+        env:
+          VITE_BASE: /hop-beat/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

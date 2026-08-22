@@ -21,6 +21,7 @@
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import type { PoseSnapshot } from './poseTypes.ts';
 import { toPoseSnapshot, type RawLandmark } from './transforms.ts';
+import { MEDIAPIPE_WASM_PATH, poseModelUrl } from '../assets.ts';
 
 export type ModelVariant = 'lite' | 'full';
 export type Delegate = 'GPU' | 'CPU';
@@ -110,10 +111,10 @@ export class MediaPipePoseProvider {
   private async load(): Promise<void> {
     // Both paths are vendored into public/ by scripts/fetch-assets.mjs, so
     // startup never waits on a CDN.
-    const fileset = await FilesetResolver.forVisionTasks('/mediapipe/wasm');
+    const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
     this.landmarker = await PoseLandmarker.createFromOptions(fileset, {
       baseOptions: {
-        modelAssetPath: `/models/pose_landmarker_${this.options.modelVariant}.task`,
+        modelAssetPath: poseModelUrl(this.options.modelVariant),
         delegate: this.options.delegate,
       },
       runningMode: 'VIDEO',

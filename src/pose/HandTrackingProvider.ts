@@ -14,6 +14,7 @@
 import { FilesetResolver, GestureRecognizer } from '@mediapipe/tasks-vision';
 import type { Delegate, FrameClockSource } from './MediaPipePoseProvider.ts';
 import type { FieldPoint } from './poseTypes.ts';
+import { GESTURE_MODEL_URL, MEDIAPIPE_WASM_PATH } from '../assets.ts';
 import {
   HAND_HIT_POINT,
   HAND_LANDMARKS,
@@ -92,10 +93,10 @@ export class HandTrackingProvider {
 
   static async create(options: HandProviderOptions): Promise<HandTrackingProvider> {
     const provider = new HandTrackingProvider();
-    const fileset = await FilesetResolver.forVisionTasks('/mediapipe/wasm');
+    const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
     provider.recognizer = await GestureRecognizer.createFromOptions(fileset, {
       baseOptions: {
-        modelAssetPath: '/models/gesture_recognizer.task',
+        modelAssetPath: GESTURE_MODEL_URL,
         delegate: options.delegate,
       },
       runningMode: 'VIDEO',

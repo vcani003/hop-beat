@@ -47,12 +47,32 @@ const candidateUrl = (path) => {
 
 const exists = (p) => stat(p).then(() => true, () => false);
 
-async function copyWasm() {
+/**
+ * The only WASM files actually requested at runtime.
+ *
+ * Verified by intercepting loads: `FilesetResolver` asks for
+ * vision_wasm_internal.{js,wasm} and nothing else on a SIMD-capable browser,
+ * which is every browser that can run this anyway. Shipping the nosimd and
+ * ES-module variants as well would add ~22 MB nobody downloads.
+ */
+const RUNTIME_WASM = ['vision_wasm_internal.js', 'vision_wasm_internal.wasm'];
+
+async function copyWasm(minimal) {
   if (!(await exists(wasmSrc))) {
     throw new Error(`MediaPipe wasm not found at ${wasmSrc}. Run npm install first.`);
   }
-  await cp(wasmSrc, wasmDest, { recursive: true });
-  console.log('  wasm     vendored from node_modules');
+
+  if (!minimal) {
+    await cp(wasmSrc, wasmDest, { recursive: true });
+    console.log('  wasm     vendored from node_modules (all variants)');
+    return;
+  }
+
+  await mkdir(wasmDest, { recursive: true });
+  for (const name of RUNTIME_WASM) {
+    await cp(resolve(wasmSrc, name), resolve(wasmDest, name));
+  }
+  console.log(`  wasm     vendored, runtime files only (${RUNTIME_WASM.length})`);
 }
 
 async function fetchModel(variant) {
@@ -82,10 +102,18 @@ async function fetchCandidate(path) {
   console.log(`  ${name.padEnd(20)} downloaded (${(bytes.length / 1e6).toFixed(1)} MB)`);
 }
 
+/**
+ * --minimal ships only what a deployed build actually loads, which is what the
+ * GitHub Pages workflow uses. A full local checkout keeps everything, because
+ * being able to compare model variants is the whole point of having them.
+ */
+const minimal = process.argv.includes('--minimal');
+
 await mkdir(modelDir, { recursive: true });
-console.log('hop//beat: vendoring pose assets');
-await copyWasm();
-for (const v of MODELS) await fetchModel(v);
+console.log(`hop//beat: vendoring pose assets${minimal ? ' (minimal)' : ''}`);
+await copyWasm(minimal);
+for (const v of minimal ? ['lite'] : MODELS) await fetchModel(v);
+if (minimal) await fetchCandidate('gesture_recognizer/gesture_recognizer');
 
 if (process.argv.includes('--tracking-candidates')) {
   console.log('  tracking candidates (see docs/TRACKING.md)');

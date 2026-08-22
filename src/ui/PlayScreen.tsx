@@ -31,6 +31,7 @@ import {
 } from '../game/engine/ScoreSystem.ts';
 import { beatmapDurationMs, type Beatmap } from '../game/maps/schema.ts';
 import { chartForTrack, LOCAL_TRACKS, WARMUP_MAP, type LocalTrack } from '../game/maps/library.ts';
+import { audioExists } from '../assets.ts';
 import type { Difficulty } from '../game/maps/patterns.ts';
 import { ClickTrackAdapter } from '../playback/ClickTrackAdapter.ts';
 import { LocalAudioAdapter } from '../playback/LocalAudioAdapter.ts';
@@ -80,6 +81,27 @@ export default function PlayScreen() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [phase, setPhase] = useState<Phase>('intro');
   const [hud, setHud] = useState<HudView>(EMPTY_HUD);
+  /**
+   * Which local tracks this build actually carries.
+   *
+   * Audio is gitignored — a deployed build has the charts and none of the
+   * recordings, which is deliberate (§11: store the beatmap, not the
+   * recording). Offering a track that will 404 the moment it is picked is
+   * worse than not offering it, so availability is checked up front.
+   */
+  const [availableTracks, setAvailableTracks] = useState<LocalTrack[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(
+      LOCAL_TRACKS.map(async (track) => ((await audioExists(`audio/${track.file}`)) ? track : null)),
+    ).then((results) => {
+      if (!cancelled) setAvailableTracks(results.filter((t): t is LocalTrack => t !== null));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [modeId, setModeId] = useState<string>(
     () => new URLSearchParams(window.location.search).get('mode') ?? 'body',
   );
@@ -108,7 +130,7 @@ export default function PlayScreen() {
    */
   const [rendererError, setRendererError] = useState<string | null>(null);
 
-  const track: LocalTrack | undefined = LOCAL_TRACKS.find((t) => t.id === trackId);
+  const track: LocalTrack | undefined = availableTracks.find((t) => t.id === trackId);
 
   /**
    * The chart is derived from the tempo grid, so correcting a bad tempo
@@ -771,7 +793,7 @@ export default function PlayScreen() {
                   <span className="songselect__title">Warm-up</span>
                   <span className="songselect__meta">120 BPM click · no audio file</span>
                 </button>
-                {LOCAL_TRACKS.map((t) => (
+                {availableTracks.map((t) => (
                   <button
                     key={t.id}
                     className={`songselect__item ${trackId === t.id ? 'is-active' : ''}`}
@@ -796,6 +818,13 @@ export default function PlayScreen() {
                   </button>
                 ))}
               </div>
+
+              {availableTracks.length === 0 && (
+                <p className="play__hint" style={{ fontSize: '0.72rem' }}>
+                  Only the click track ships with this build — music files are not
+                  published with it. Run it locally to play your own.
+                </p>
+              )}
 
               <p className="play__hint">
                 {map.notes.length} notes · {map.analysis.bpm.toFixed(1)} BPM

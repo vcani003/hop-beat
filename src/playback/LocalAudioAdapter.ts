@@ -9,6 +9,7 @@
  * GameClock exists to smooth over.
  */
 import type { PlaybackAdapter, PlaybackState } from './PlaybackAdapter.ts';
+import { assetUrl } from '../assets.ts';
 
 export class LocalAudioAdapter implements PlaybackAdapter {
   private audio: HTMLAudioElement;
@@ -19,7 +20,7 @@ export class LocalAudioAdapter implements PlaybackAdapter {
     this.audio = new Audio();
     this.audio.preload = 'auto';
     if (typeof source === 'string') {
-      this.audio.src = source;
+      this.audio.src = assetUrl(source);
     } else {
       this.objectUrl = URL.createObjectURL(source);
       this.audio.src = this.objectUrl;

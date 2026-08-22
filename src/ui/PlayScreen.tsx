@@ -771,11 +771,13 @@ export default function PlayScreen() {
                 {phase === 'arming' ? 'Starting camera…' : 'Start camera'}
               </button>
               <div className="play__links">
-                <button className="button--quiet" onClick={() => navigate('/debug')}>
-                  MVP 0 debug view
-                </button>
+                {showDiagnostics && (
+                  <button className="button--quiet" onClick={() => navigate('/debug')}>
+                    MVP 0 debug view
+                  </button>
+                )}
                 <button className="button--quiet" onClick={() => navigate('/spec')}>
-                  Spec progress
+                  How this was built
                 </button>
               </div>
             </div>
@@ -890,11 +892,13 @@ export default function PlayScreen() {
               </label>
 
               <div className="play__links">
-                <button className="button--quiet" onClick={() => navigate('/debug')}>
-                  MVP 0 debug view
-                </button>
+                {showDiagnostics && (
+                  <button className="button--quiet" onClick={() => navigate('/debug')}>
+                    MVP 0 debug view
+                  </button>
+                )}
                 <button className="button--quiet" onClick={() => navigate('/spec')}>
-                  Spec progress
+                  How this was built
                 </button>
               </div>
             </div>

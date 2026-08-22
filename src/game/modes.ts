@@ -21,13 +21,7 @@ export interface GameMode {
   stance: string;
   /** Model fetched on entering the mode, in MB, for an honest loading message. */
   modelSizeMb: number;
-  /**
-   * Hidden from the mode picker, but fully intact and still runnable.
-   *
-   * Hidden is not removed. The mode works; it is simply not offered while the
-   * problems in spec §25 are unsolved, so nobody is handed an experience that
-   * is known to feel bad.
-   */
+  /** Kept for future modes that should not be offered yet. None are hidden today. */
   hidden?: boolean;
 }
 
@@ -39,7 +33,6 @@ export const BODY_MODE: GameMode = {
   capabilities: ['body'],
   stance: 'Stand back — head and hips both in frame.',
   modelSizeMb: 5.8,
-  hidden: true,
 };
 
 export const HANDS_MODE: GameMode = {
@@ -55,7 +48,6 @@ export const HANDS_MODE: GameMode = {
   // serves both well.
   stance: 'Come closer — hands up, elbows relaxed. Your whole body does not need to fit.',
   modelSizeMb: 8.4,
-  hidden: true,
 };
 
 export const GAME_MODES: readonly GameMode[] = [BODY_MODE, HANDS_MODE];
@@ -63,8 +55,9 @@ export const GAME_MODES: readonly GameMode[] = [BODY_MODE, HANDS_MODE];
 /**
  * Modes offered in the picker.
  *
- * Hidden modes remain reachable — `?mode=body` still works — so the work is
- * not stranded and can be tried again the moment there is a reason to.
+ * Both camera modes are offered. They are deprecated in the sense of §25 — no
+ * new work is going into them — but they are playable, and leaving them
+ * playable is how anyone else gets to try them and say what is wrong.
  */
 export const VISIBLE_MODES: readonly GameMode[] = GAME_MODES.filter((m) => !m.hidden);
 

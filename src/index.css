@@ -860,3 +860,12 @@ kbd {
 }
 .deprecation__list { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; }
 .deprecation__list li { font-size: 0.8rem; line-height: 1.6; color: var(--text); }
+
+.howto {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.howto li { font-size: 0.78rem; line-height: 1.6; color: var(--muted); }

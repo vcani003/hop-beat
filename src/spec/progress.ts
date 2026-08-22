@@ -36,7 +36,7 @@ export const DEPRECATIONS: Deprecation[] = [
     subject: 'Camera-based tracking',
     specSection: '§25',
     summary:
-      'Hidden from the mode picker and closed to further work. The code stays and still runs — ?mode=body reaches it. Four things are unsolved: there are no haptics, so hitting the air feels like nothing; camera latency spends ~28 ms before judgment even starts; how to give readable visual feedback while moving fast is not yet understood; and hitting beats stayed awkward through every round of fixes. Alongside that, nearly every change after MVP 0 was input-layer and almost none was the game.',
+      'Closed to further work, but still playable and still offered — the only way to learn more about problems this vague is for other people to try it. The player-facing UI now teaches how to play rather than reporting instrumentation; diagnostics moved behind ?debug=1. Four things are unsolved: there are no haptics, so hitting the air feels like nothing; camera latency spends ~28 ms before judgment even starts; how to give readable visual feedback while moving fast is not yet understood; and hitting beats stayed awkward through every round of fixes. Alongside that, nearly every change after MVP 0 was input-layer and almost none was the game.',
     stillTrue: [
       'A normal webcam was proven to be a viable controller — MVP 0’s exit criterion was met and signed off in play.',
       'The engine consumes ZoneEvents and has never known where they come from, so another input source attaches without touching the clock, judgment, scoring, charts or renderer.',

@@ -66,15 +66,14 @@ describe('game modes', () => {
   });
 });
 
-describe('hidden modes', () => {
+describe('mode visibility', () => {
   /**
-   * Hidden is not removed. Both camera modes still work; they are simply not
-   * offered while the problems in spec §25 are open, so nobody is handed an
-   * experience already known to feel bad.
+   * Deprecated in the sense of §25 — no new work — but playable. Leaving them
+   * in the picker is how anyone else gets to try them and say what is wrong.
    */
-  it('hides the camera modes from the picker', () => {
-    expect(VISIBLE_MODES).not.toContain(BODY_MODE);
-    expect(VISIBLE_MODES).not.toContain(HANDS_MODE);
+  it('still offers both camera modes', () => {
+    expect(VISIBLE_MODES).toContain(BODY_MODE);
+    expect(VISIBLE_MODES).toContain(HANDS_MODE);
   });
 
   it('keeps them intact and resolvable by id', () => {
@@ -83,8 +82,8 @@ describe('hidden modes', () => {
     expect(findMode('hands')).toBe(HANDS_MODE);
   });
 
-  it('leaves every hidden mode otherwise complete', () => {
-    for (const mode of GAME_MODES.filter((m) => m.hidden)) {
+  it('leaves every mode complete, hidden or not', () => {
+    for (const mode of GAME_MODES) {
       expect(mode.capabilities.length, mode.id).toBeGreaterThan(0);
       expect(mode.layout, mode.id).toBeTruthy();
       expect(mode.stance.length, mode.id).toBeGreaterThan(10);

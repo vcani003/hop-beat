@@ -80,9 +80,21 @@ export default function PlayScreen() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [phase, setPhase] = useState<Phase>('intro');
   const [hud, setHud] = useState<HudView>(EMPTY_HUD);
-  // Hidden modes stay reachable by URL so the work is not stranded.
   const [modeId, setModeId] = useState<string>(
     () => new URLSearchParams(window.location.search).get('mode') ?? 'body',
+  );
+
+  /**
+   * Developer readouts are off unless asked for with ?debug=1.
+   *
+   * Clock drift, inference cost and timing bias are diagnostics for whoever is
+   * building this. To a player they are noise at best and discouraging at
+   * worst — a panel of numbers implies the game is something to be configured
+   * rather than played. The MVP 0 view at /#/debug still has all of it.
+   */
+  const showDiagnostics = useMemo(
+    () => new URLSearchParams(window.location.search).get('debug') === '1',
+    [],
   );
   const mode = findMode(modeId);
   const [trackId, setTrackId] = useState<string>('warmup');
@@ -720,8 +732,7 @@ export default function PlayScreen() {
               </div>
 
               <p className="play__hint" style={{ fontSize: '0.72rem' }}>
-                {mode.modelSizeMb} MB model, downloaded when you start this mode.
-                {requiresHands(mode) ? ' Needs the GPU delegate.' : ''}
+                First start downloads the tracking model — a few seconds, once.
               </p>
               {fatalError && <div className="error"><div className="error__title">{fatalError}</div></div>}
               {pose.error && (
@@ -882,7 +893,7 @@ export default function PlayScreen() {
                 </div>
               </div>
 
-              {(() => {
+              {showDiagnostics && (() => {
                 const diagnosis = timingDiagnosis(score);
                 if (diagnosis.fault === 'unknown' || diagnosis.fault === 'none') return null;
                 return (
@@ -893,9 +904,11 @@ export default function PlayScreen() {
               })()}
 
               <button className="button--primary" onClick={retry}>Play again</button>
-              <button onClick={downloadLog}>
-                Download play log{markCount > 0 ? ` (${markCount} marked)` : ''}
-              </button>
+              {showDiagnostics && (
+                <button onClick={downloadLog}>
+                  Download play log{markCount > 0 ? ` (${markCount} marked)` : ''}
+                </button>
+              )}
               <button onClick={quit}>Menu</button>
             </div>
           </div>
@@ -903,11 +916,33 @@ export default function PlayScreen() {
       </div>
 
       <aside className="play__side">
-        <h2 className="panel__heading">Calibration</h2>
+        <h2 className="panel__heading">How to play</h2>
+        <ol className="howto">
+          <li>Stand where the camera can see you, and check you can reach all four targets.</li>
+          <li>Each target lights up with a ring closing in on it.</li>
+          <li>Hit the target when the ring meets it — with your hand, in the air.</li>
+          <li>Keep going. Missing one is fine; the next is already on its way.</li>
+        </ol>
+
+        <h2 className="panel__heading" style={{ marginTop: 18 }}>Target size</h2>
+        <div className="sizecontrol">
+          <span className="sizecontrol__label">size</span>
+          <button onClick={() => nudgeSize(-1)} aria-label="Smaller targets">−</button>
+          <span className="sizecontrol__value mono">{settings.zoneScale.toFixed(2)}×</span>
+          <button onClick={() => nudgeSize(1)} aria-label="Bigger targets">+</button>
+        </div>
+        <p className="hint" style={{ marginTop: 8 }}>
+          Make them bigger if they are hard to hit. Works during a song, or press{' '}
+          <kbd>[</kbd> <kbd>]</kbd>.
+        </p>
+
+        <h2 className="panel__heading" style={{ marginTop: 18 }}>If it feels out of time</h2>
         <div className="field">
           <label className="field__label">
-            <span>audio offset</span>
-            <span className="field__value mono">{settings.audioOffsetMs > 0 ? '+' : ''}{settings.audioOffsetMs} ms</span>
+            <span>timing</span>
+            <span className="field__value mono">
+              {settings.audioOffsetMs > 0 ? '+' : ''}{settings.audioOffsetMs} ms
+            </span>
           </label>
           <input
             type="range"
@@ -917,108 +952,14 @@ export default function PlayScreen() {
             value={settings.audioOffsetMs}
             onChange={(e) => {
               const audioOffsetMs = Number(e.target.value);
-              setSettings((s) => ({ ...s, audioOffsetMs }));
+              setSettings((prev) => ({ ...prev, audioOffsetMs }));
               clockRef.current?.setOffsetMs(audioOffsetMs);
             }}
           />
           <p className="field__help">
-            Shifts every note's judged time. If you consistently read as <strong>late</strong>,
-            increase it — the number is compensating for delay between your hand moving and
-            the game seeing it.
+            Slide right if the game feels like it wants you to hit early, left if late.
           </p>
         </div>
-
-        {live && (
-          <>
-            <div className="row"><span className="row__label">mode</span>
-              <span className="row__value mono">{mode.name}</span></div>
-            <div className="row"><span className="row__label">timing bias</span>
-              <span className="row__value mono">
-                {meanDeltaMs(score) === null
-                  ? '—'
-                  : `${meanDeltaMs(score)! > 0 ? '+' : ''}${meanDeltaMs(score)!.toFixed(0)} ms ${meanDeltaMs(score)! > 0 ? 'late' : 'early'}`}
-              </span></div>
-            <div className="row"><span className="row__label">spread</span>
-              <span className="row__value mono">{meanAbsDeltaMs(score) === null ? '—' : `${meanAbsDeltaMs(score)!.toFixed(0)} ms`}</span></div>
-            <div className="row"><span className="row__label">clock drift</span>
-              <span className="row__value mono">{hud.driftMs.toFixed(1)} ms</span></div>
-            <div className="row"><span className="row__label">pose</span>
-              <span className="row__value mono">{pose.telemetry.poseHz.toFixed(0)} Hz</span></div>
-            <div className="row"><span className="row__label">input latency</span>
-              <span className="row__value mono">{pose.telemetry.latencyMeanMs.toFixed(0)} ms</span></div>
-          </>
-        )}
-
-        {(() => {
-          const suggestion = suggestedOffsetMs(score, settings.audioOffsetMs);
-          if (suggestion === null || suggestion === settings.audioOffsetMs) return null;
-          return (
-            <button
-              style={{ marginTop: 10 }}
-              onClick={() => {
-                setSettings((s) => ({ ...s, audioOffsetMs: suggestion }));
-                clockRef.current?.setOffsetMs(suggestion);
-              }}
-            >
-              Set offset to {suggestion > 0 ? '+' : ''}{suggestion} ms
-            </button>
-          );
-        })()}
-
-        {(() => {
-          const diagnosis = timingDiagnosis(score);
-          if (diagnosis.fault === 'unknown') return null;
-          const colour =
-            diagnosis.fault === 'tempo'
-              ? 'var(--bad)'
-              : diagnosis.fault === 'offset'
-                ? 'var(--gold)'
-                : 'var(--good)';
-          return (
-            <p className="hint" style={{ marginTop: 10, color: colour, lineHeight: 1.6 }}>
-              {diagnosis.explanation}
-            </p>
-          );
-        })()}
-
-        <p className="hint" style={{ marginTop: 12 }}>
-          <strong>Bias</strong> is which way you are off, and the offset slider cancels
-          it. <strong>Spread</strong> is how tight you are — a large spread with a small
-          bias means the windows are hard, not miscalibrated.
-        </p>
-
-        <h2 className="panel__heading" style={{ marginTop: 18 }}>Diagnostics</h2>
-        <div className="row">
-          <span className="row__label">moments marked</span>
-          <span className="row__value mono">{markCount}</span>
-        </div>
-        <button
-          style={{ marginTop: 8 }}
-          disabled={phase !== 'playing'}
-          onClick={markMoment}
-        >
-          Mark this moment <kbd>M</kbd>
-        </button>
-        <button style={{ marginTop: 6 }} onClick={downloadLog}>
-          Download play log
-        </button>
-        <p className="hint" style={{ marginTop: 8 }}>
-          Press <kbd>M</kbd> the instant something feels wrong. The log keeps a two-second
-          window around each mark — where your hands were, what fired, and what the note
-          was doing — which is what makes a miss diagnosable instead of anecdotal.
-        </p>
-
-        <h2 className="panel__heading" style={{ marginTop: 18 }}>Targets</h2>
-        <div className="sizecontrol">
-          <span className="sizecontrol__label">size</span>
-          <button onClick={() => nudgeSize(-1)} aria-label="Smaller targets">−</button>
-          <span className="sizecontrol__value mono">{settings.zoneScale.toFixed(2)}×</span>
-          <button onClick={() => nudgeSize(1)} aria-label="Bigger targets">+</button>
-        </div>
-        <p className="hint" style={{ marginTop: 8 }}>
-          Works during a song. <kbd>[</kbd> <kbd>]</kbd> do the same from the keyboard.
-          Size never moves a target — spec §24.
-        </p>
 
         <h2 className="panel__heading" style={{ marginTop: 18 }}>View</h2>
         <label className="checkbox">
@@ -1046,17 +987,81 @@ export default function PlayScreen() {
           mirror
         </label>
 
-        <h2 className="panel__heading" style={{ marginTop: 18 }}>Position</h2>
         <button
+          style={{ marginTop: 14 }}
           disabled={pose.status !== 'running' || phase === 'calibrating' || phase === 'playing'}
           onClick={startPositioning}
         >
           Check my position
         </button>
         <p className="hint" style={{ marginTop: 8 }}>
-          The targets never move. If a corner is out of reach, step closer to the
-          camera — distance is what decides how much of the frame your arms cover.
+          The targets never move. If one is out of reach, step closer to the camera.
         </p>
+
+        {showDiagnostics && (
+          <>
+            <h2 className="panel__heading" style={{ marginTop: 20 }}>Diagnostics</h2>
+            <div className="row"><span className="row__label">mode</span>
+              <span className="row__value mono">{mode.name}</span></div>
+            <div className="row"><span className="row__label">timing bias</span>
+              <span className="row__value mono">
+                {meanDeltaMs(score) === null
+                  ? '—'
+                  : `${meanDeltaMs(score)! > 0 ? '+' : ''}${meanDeltaMs(score)!.toFixed(0)} ms`}
+              </span></div>
+            <div className="row"><span className="row__label">spread</span>
+              <span className="row__value mono">
+                {meanAbsDeltaMs(score) === null ? '—' : `${meanAbsDeltaMs(score)!.toFixed(0)} ms`}
+              </span></div>
+            <div className="row"><span className="row__label">clock drift</span>
+              <span className="row__value mono">{hud.driftMs.toFixed(1)} ms</span></div>
+            <div className="row"><span className="row__label">pose</span>
+              <span className="row__value mono">{pose.telemetry.poseHz.toFixed(0)} Hz</span></div>
+            <div className="row"><span className="row__label">input latency</span>
+              <span className="row__value mono">{pose.telemetry.latencyMeanMs.toFixed(0)} ms</span></div>
+            <div className="row"><span className="row__label">marks</span>
+              <span className="row__value mono">{markCount}</span></div>
+
+            {(() => {
+              const diagnosis = timingDiagnosis(score);
+              if (diagnosis.fault === 'unknown') return null;
+              const colour =
+                diagnosis.fault === 'tempo'
+                  ? 'var(--bad)'
+                  : diagnosis.fault === 'offset'
+                    ? 'var(--gold)'
+                    : 'var(--good)';
+              return (
+                <p className="hint" style={{ marginTop: 10, color: colour, lineHeight: 1.6 }}>
+                  {diagnosis.explanation}
+                </p>
+              );
+            })()}
+
+            {(() => {
+              const suggestion = suggestedOffsetMs(score, settings.audioOffsetMs);
+              if (suggestion === null || suggestion === settings.audioOffsetMs) return null;
+              return (
+                <button
+                  style={{ marginTop: 10 }}
+                  onClick={() => {
+                    setSettings((s) => ({ ...s, audioOffsetMs: suggestion }));
+                    clockRef.current?.setOffsetMs(suggestion);
+                  }}
+                >
+                  Set timing to {suggestion > 0 ? '+' : ''}{suggestion} ms
+                </button>
+              );
+            })()}
+
+            <button style={{ marginTop: 8 }} disabled={phase !== 'playing'} onClick={markMoment}>
+              Mark this moment <kbd>M</kbd>
+            </button>
+            <button style={{ marginTop: 6 }} onClick={downloadLog}>
+              Download play log
+            </button>
+          </>
+        )}
       </aside>
     </div>
   );

@@ -612,11 +612,23 @@ deleted, not broken, and not disowned — it is closed to further work.
 
 ## Status
 
-Everything built for it stays in the repository and keeps working:
-pose tracking, hand tracking, the zone tracker, positioning, target layouts,
-game modes and their tests. MVP 0's result stands: a normal webcam was proven
-to be a viable controller, at roughly 28 ms of input latency, and that finding
-does not expire because the direction changed.
+Everything built for it stays in the repository, **stays playable, and stays
+offered in the mode picker**: pose tracking, hand tracking, the zone tracker,
+positioning, target layouts, game modes and their tests. MVP 0's result stands
+— a normal webcam was proven to be a viable controller, at roughly 28 ms of
+input latency — and that finding does not expire because the direction changed.
+
+It is left playable on purpose. The problems below are felt, not measured, and
+the only way to learn more about them is for other people to try it and say
+what is wrong. A version nobody can reach collects no opinions.
+
+What it does **not** show is the developer instrumentation. Clock drift,
+inference cost, timing bias and the play-log tools are diagnostics for whoever
+is building this; to a player they are noise, and a panel of numbers implies a
+thing to be configured rather than played. The player-facing panel explains how
+to play, how to resize the targets and what to do if the timing feels off.
+Everything else moves behind `?debug=1`, and the MVP 0 view at `/#/debug`
+still carries all of it.
 
 ## What deprecated means here
 

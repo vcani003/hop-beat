@@ -826,3 +826,37 @@ kbd {
   background: rgba(139, 92, 246, 0.14);
   color: var(--text);
 }
+
+/* ---- deprecations ---- */
+
+.deprecations { margin-top: 1.5rem; }
+
+.deprecation {
+  background: var(--panel);
+  border: 1px solid rgba(245, 196, 81, 0.35);
+  border-left-width: 3px;
+  border-radius: 10px;
+  padding: 1.1rem 1.3rem;
+}
+
+.deprecation__head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.deprecation__title { font-size: 1rem; font-weight: 700; margin: 0; }
+.deprecation__spec { font-size: 0.72rem; color: var(--muted); }
+.chip--deprecated { background: rgba(245, 196, 81, 0.16); color: var(--gold); }
+
+.deprecation__summary { font-size: 0.85rem; line-height: 1.65; color: var(--muted); margin: 0 0 0.9rem; }
+.deprecation__label {
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 0.4rem;
+}
+.deprecation__list { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.deprecation__list li { font-size: 0.8rem; line-height: 1.6; color: var(--text); }

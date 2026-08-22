@@ -15,6 +15,36 @@
 
 export type Status = 'done' | 'active' | 'todo';
 
+/**
+ * A capability the project has stopped developing.
+ *
+ * Deprecated is not deleted and not failed. It records that work has closed on
+ * something, and why, so the reason survives longer than the conversation that
+ * produced it.
+ */
+export interface Deprecation {
+  subject: string;
+  /** Spec section stating the terms. */
+  specSection: string;
+  summary: string;
+  /** Things that were established and still hold. */
+  stillTrue: string[];
+}
+
+export const DEPRECATIONS: Deprecation[] = [
+  {
+    subject: 'Camera-based tracking',
+    specSection: '§25',
+    summary:
+      'Closed to further work after MVP 1. The code stays and keeps working; no new features, no further tuning. Not a technical failure — the controller met its exit criterion at ~28 ms of input latency. The reason is that nearly every change after MVP 0 was to the input layer and almost none was to the rhythm game.',
+    stillTrue: [
+      'A normal webcam was proven to be a viable controller — MVP 0’s exit criterion was met and signed off in play.',
+      'The engine consumes ZoneEvents and has never known where they come from, so another input source attaches without touching the clock, judgment, scoring, charts or renderer.',
+      'Spec §24 still binds any camera mode that is ever revived.',
+    ],
+  },
+];
+
 export interface Task {
   title: string;
   status: Status;
@@ -300,6 +330,12 @@ export const DECISIONS: DecisionEntry[] = [
       'Targets stay at fixed screen coordinates so they can be learned, so a chart\u2019s difficulty means something, and so two people can compare scores. Calibration tells the player where to stand instead — reach in screen space depends on distance from the camera, so an unreachable corner is solved by stepping closer.',
     corrects:
       'an earlier version that fitted the targets to the player, which spec §3 rules out',
+  },
+  {
+    number: 15,
+    title: 'Camera tracking is deprecated',
+    summary:
+      'Closed to further work, not deleted. Not a verdict on whether it worked — MVP 0 passed — but on where the effort was going: after MVP 0 nearly every change was input-layer, and almost none was the game. Cheap to do because the engine never knew where its input came from.',
   },
 ];
 

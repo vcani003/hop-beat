@@ -605,4 +605,54 @@ else, that is a new layout with a new id, not a per-player adjustment.
 - Every layout ships with a test that all of its targets fit on screen.
 
 
+# 25. Deprecation — camera tracking
+
+Recorded after MVP 1. **Camera-based tracking is deprecated.** It is not
+deleted, not broken, and not disowned — it is closed to further work.
+
+## Status
+
+Everything built for it stays in the repository and keeps working:
+pose tracking, hand tracking, the zone tracker, positioning, target layouts,
+game modes and their tests. MVP 0's result stands: a normal webcam was proven
+to be a viable controller, at roughly 28 ms of input latency, and that finding
+does not expire because the direction changed.
+
+## What deprecated means here
+
+- **No new features** are built on camera input.
+- **No further tuning** of calibration, positioning, hit detection, gesture
+  recognition or tracking backends.
+- Existing behaviour is **left as it is**. Bugs in it are not fixed unless
+  something else depends on them.
+- §24's positioning rules still describe how camera modes behave, and remain
+  binding on any camera mode that is ever revived.
+
+## Why
+
+Not a technical failure. The controller met its exit criterion and the timing
+pipeline is sound.
+
+The reason is where the effort went. Across the sessions following MVP 0,
+nearly all of the work was in the input layer — calibration, field fitting,
+re-arm behaviour, swept collision, target sizing, gesture design, hand
+tracking, tracking cost analysis — and almost none of it was the rhythm game.
+An input method that needs that much attention before the game underneath can
+be judged is absorbing the project rather than serving it.
+
+## What survives independently
+
+The parts worth keeping are the parts that never knew about a camera:
+
+- `GameClock` — an authoritative playback clock with bias correction
+- `NoteJudge`, `ScoreSystem`, `GameEngine` — pure, clock-free, tested
+- the beatmap schema, validator and hand-authored patterns
+- the PixiJS renderer
+- `PlaybackAdapter` and the click-track and local-audio sources
+
+The engine consumes `ZoneEvent`s and has never known where they came from.
+That boundary, set in MVP 0, is what makes this deprecation cheap: another
+input source can be attached without touching anything above it.
+
+
 End of specification

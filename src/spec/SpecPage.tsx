@@ -8,6 +8,7 @@
  */
 import {
   DECISIONS,
+  DEPRECATIONS,
   MILESTONES,
   OPEN_QUESTIONS,
   questionTotals,
@@ -159,6 +160,27 @@ export default function SpecPage() {
             </div>
           </div>
         </header>
+
+        {DEPRECATIONS.length > 0 && (
+          <section className="deprecations">
+            {DEPRECATIONS.map((d) => (
+              <div key={d.subject} className="deprecation">
+                <div className="deprecation__head">
+                  <span className="chip chip--deprecated">deprecated</span>
+                  <h3 className="deprecation__title">{d.subject}</h3>
+                  <span className="deprecation__spec mono">{d.specSection}</span>
+                </div>
+                <p className="deprecation__summary">{d.summary}</p>
+                <p className="deprecation__label">Still true:</p>
+                <ul className="deprecation__list">
+                  {d.stillTrue.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </section>
+        )}
 
         <h2 className="spec__section">Roadmap</h2>
         <div className="milestones">

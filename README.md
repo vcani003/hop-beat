@@ -4,6 +4,9 @@ A browser-based spatial rhythm game where an ordinary webcam turns the
 player's body into the controller. Targets arrive on beat; pose landmarks
 decide input; a precomputed beatmap decides timing.
 
+> **Camera tracking is deprecated** — closed to further work, not deleted. It
+> still runs; nothing new is built on it. See §25 of the spec and decision 15.
+
 **MVP 0 is built.** Webcam, pose landmarks, four zones and wrist-entry events,
 with a debug HUD. No music, no scoring, no art — by design.
 See [`docs/SPEC.md`](docs/SPEC.md) and [`docs/DECISIONS.md`](docs/DECISIONS.md).

@@ -315,6 +315,28 @@ them — which is the property worth having.
 **Not yet signed off.** Every task is built; the criterion needs a full song
 played end to end.
 
+### 15. Camera tracking is deprecated
+
+Marked deprecated after MVP 1, at the project owner's direction: *"we are going
+off the rails... deprecate hop//beat's camera tracking entirely, we are taking
+a step back."*
+
+Deprecated, not deleted. The code stays and keeps working; no new work is done
+on it. Spec §25 states the terms.
+
+This is not a verdict on whether it worked. MVP 0 met its exit criterion and
+the measured latency was fine. It is a verdict on where the effort was going:
+across the sessions after MVP 0, nearly every change was to the input layer,
+and almost none was to the rhythm game. Calibration alone took four rounds,
+largely because I kept inventing interaction design from short prompts instead
+of asking — and each of those rounds spent attention that the game underneath
+never got.
+
+What makes this cheap is a boundary drawn in MVP 0: the engine consumes
+`ZoneEvent`s and has never known where they come from. Everything above the
+input layer — clock, judgment, scoring, charts, renderer — is untouched by
+this, and would accept a different input source without modification.
+
 ---
 
 ## Open after MVP 0

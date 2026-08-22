@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { BODY_MODE, findMode, GAME_MODES, HANDS_MODE, requiresBody, requiresHands } from '../src/game/modes.ts';
+import {
+  BODY_MODE,
+  findMode,
+  GAME_MODES,
+  HANDS_MODE,
+  requiresBody,
+  requiresHands,
+  VISIBLE_MODES,
+} from '../src/game/modes.ts';
 import { TARGET_LAYOUTS } from '../src/game/zones.ts';
 
 describe('game modes', () => {
@@ -55,5 +63,31 @@ describe('game modes', () => {
     expect(findMode(undefined)).toBe(BODY_MODE);
     expect(findMode('nope')).toBe(BODY_MODE);
     expect(findMode('hands')).toBe(HANDS_MODE);
+  });
+});
+
+describe('hidden modes', () => {
+  /**
+   * Hidden is not removed. Both camera modes still work; they are simply not
+   * offered while the problems in spec §25 are open, so nobody is handed an
+   * experience already known to feel bad.
+   */
+  it('hides the camera modes from the picker', () => {
+    expect(VISIBLE_MODES).not.toContain(BODY_MODE);
+    expect(VISIBLE_MODES).not.toContain(HANDS_MODE);
+  });
+
+  it('keeps them intact and resolvable by id', () => {
+    expect(GAME_MODES).toContain(BODY_MODE);
+    expect(findMode('body')).toBe(BODY_MODE);
+    expect(findMode('hands')).toBe(HANDS_MODE);
+  });
+
+  it('leaves every hidden mode otherwise complete', () => {
+    for (const mode of GAME_MODES.filter((m) => m.hidden)) {
+      expect(mode.capabilities.length, mode.id).toBeGreaterThan(0);
+      expect(mode.layout, mode.id).toBeTruthy();
+      expect(mode.stance.length, mode.id).toBeGreaterThan(10);
+    }
   });
 });

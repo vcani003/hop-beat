@@ -631,14 +631,63 @@ does not expire because the direction changed.
 ## Why
 
 Not a technical failure. The controller met its exit criterion and the timing
-pipeline is sound.
+pipeline is sound. Four specific things are unsolved, and they are the reason:
 
-The reason is where the effort went. Across the sessions following MVP 0,
-nearly all of the work was in the input layer — calibration, field fitting,
-re-arm behaviour, swept collision, target sizing, gesture design, hand
-tracking, tracking cost analysis — and almost none of it was the rhythm game.
-An input method that needs that much attention before the game underneath can
-be judged is absorbing the project rather than serving it.
+**Haptics.** There are none. Hitting a target in the air feels like nothing at
+all, because nothing is there. DDR works partly because a foot lands on a pad
+and the body registers the impact without needing to be told. Waving at a
+screen has no equivalent, and no amount of visual polish substitutes for it.
+
+**Camera latency.** ~28 ms measured, before any judgment logic runs, which is a
+third of a ±80 ms window spent before the player's movement is even seen. It is
+survivable but it is not free, and it stacks with everything else.
+
+**Visual feedback is not yet understood.** How to signal an incoming note, a
+landed hit and a miss — at a size and pace readable while moving fast — is a
+real design problem that has not been solved here. Approach rings were a first
+attempt, not an answer.
+
+**Hitting beats is awkward.** Reported repeatedly and never fully fixed: hits
+that do not register, targets that are hard to reach, difficulty telling which
+of several targets is next. Each round improved something and the whole never
+became comfortable.
+
+Alongside that, the effort was going to the wrong place: across the sessions
+after MVP 0, nearly all work was in the input layer and almost none was the
+rhythm game. An input method needing that much attention before the game
+underneath can be judged is absorbing the project rather than serving it.
+
+## Ideas worth trying if this is revived
+
+Kept because the goal has not changed — *"I would so love to play DDR"* — and
+because these were not tried.
+
+**Use the floor.** Feet, not hands. This is where DDR's haptics actually come
+from: the ground stops your foot and your body feels it, for free, with no
+hardware. It also removes the reach problem entirely — a floor target is
+reachable by definition — and MediaPipe already returns ankle and foot
+landmarks.
+
+**Audio as the missing sense.** A percussive click on every hit, immediately,
+before any scoring is resolved. Sound is the fastest feedback channel available
+and needs no hardware. Rhythm players lean on it far more than on visuals.
+
+**A phone in each hand.** Real vibration, real haptics, and an accelerometer
+with none of the camera's latency. Costs a pairing step and a transport, but it
+is the only route to genuine touch feedback.
+
+**Predictive compensation.** The wrist's velocity is known, so its position can
+be extrapolated forward by the measured latency. Fights the pipeline delay
+rather than accepting it.
+
+**Fire on the way in, not at arrival.** A strike could be judged at the moment
+the hand commits — a velocity threshold toward a target — rather than when it
+arrives. That is earlier than the geometric crossing and closer to when the
+player believes they hit.
+
+**Fewer, larger, and one at a time.** Reachability and readability both improve.
+The easy chart moved in this direction and helped; it may not have gone far
+enough.
 
 ## What survives independently
 

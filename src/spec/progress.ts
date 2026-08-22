@@ -36,11 +36,12 @@ export const DEPRECATIONS: Deprecation[] = [
     subject: 'Camera-based tracking',
     specSection: '§25',
     summary:
-      'Closed to further work after MVP 1. The code stays and keeps working; no new features, no further tuning. Not a technical failure — the controller met its exit criterion at ~28 ms of input latency. The reason is that nearly every change after MVP 0 was to the input layer and almost none was to the rhythm game.',
+      'Hidden from the mode picker and closed to further work. The code stays and still runs — ?mode=body reaches it. Four things are unsolved: there are no haptics, so hitting the air feels like nothing; camera latency spends ~28 ms before judgment even starts; how to give readable visual feedback while moving fast is not yet understood; and hitting beats stayed awkward through every round of fixes. Alongside that, nearly every change after MVP 0 was input-layer and almost none was the game.',
     stillTrue: [
       'A normal webcam was proven to be a viable controller — MVP 0’s exit criterion was met and signed off in play.',
       'The engine consumes ZoneEvents and has never known where they come from, so another input source attaches without touching the clock, judgment, scoring, charts or renderer.',
       'Spec §24 still binds any camera mode that is ever revived.',
+      'The goal has not changed — §25 keeps a list of untried ideas, starting with using the floor and feet, where DDR’s haptics actually come from.',
     ],
   },
 ];

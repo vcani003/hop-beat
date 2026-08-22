@@ -39,7 +39,7 @@ import { GameRenderer } from '../render/pixi/GameRenderer.ts';
 import { PlayRecorder } from '../debug/PlayRecorder.ts';
 import { scaledZones, usePosePipeline } from '../pose/usePosePipeline.ts';
 import { checkHandPosition, checkPosition, type PositionCheck } from '../game/positioning.ts';
-import { findMode, GAME_MODES, requiresHands } from '../game/modes.ts';
+import { findMode, GAME_MODES, requiresHands, VISIBLE_MODES } from '../game/modes.ts';
 import { stepZoneScale, zoneScaleForKey } from '../game/targetSizing.ts';
 import type { Zone } from '../game/zones.ts';
 import { loadSettings, saveSettings } from './settingsStorage.ts';
@@ -80,7 +80,10 @@ export default function PlayScreen() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [phase, setPhase] = useState<Phase>('intro');
   const [hud, setHud] = useState<HudView>(EMPTY_HUD);
-  const [modeId, setModeId] = useState<string>('body');
+  // Hidden modes stay reachable by URL so the work is not stranded.
+  const [modeId, setModeId] = useState<string>(
+    () => new URLSearchParams(window.location.search).get('mode') ?? 'body',
+  );
   const mode = findMode(modeId);
   const [trackId, setTrackId] = useState<string>('warmup');
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
@@ -703,7 +706,7 @@ export default function PlayScreen() {
               </p>
 
               <div className="songselect">
-                {GAME_MODES.map((m) => (
+                {(VISIBLE_MODES.length > 0 ? VISIBLE_MODES : GAME_MODES).map((m) => (
                   <button
                     key={m.id}
                     className={`songselect__item ${modeId === m.id ? 'is-active' : ''}`}

@@ -21,6 +21,14 @@ export interface GameMode {
   stance: string;
   /** Model fetched on entering the mode, in MB, for an honest loading message. */
   modelSizeMb: number;
+  /**
+   * Hidden from the mode picker, but fully intact and still runnable.
+   *
+   * Hidden is not removed. The mode works; it is simply not offered while the
+   * problems in spec §25 are unsolved, so nobody is handed an experience that
+   * is known to feel bad.
+   */
+  hidden?: boolean;
 }
 
 export const BODY_MODE: GameMode = {
@@ -31,6 +39,7 @@ export const BODY_MODE: GameMode = {
   capabilities: ['body'],
   stance: 'Stand back — head and hips both in frame.',
   modelSizeMb: 5.8,
+  hidden: true,
 };
 
 export const HANDS_MODE: GameMode = {
@@ -46,9 +55,18 @@ export const HANDS_MODE: GameMode = {
   // serves both well.
   stance: 'Come closer — hands up, elbows relaxed. Your whole body does not need to fit.',
   modelSizeMb: 8.4,
+  hidden: true,
 };
 
 export const GAME_MODES: readonly GameMode[] = [BODY_MODE, HANDS_MODE];
+
+/**
+ * Modes offered in the picker.
+ *
+ * Hidden modes remain reachable — `?mode=body` still works — so the work is
+ * not stranded and can be tried again the moment there is a reason to.
+ */
+export const VISIBLE_MODES: readonly GameMode[] = GAME_MODES.filter((m) => !m.hidden);
 
 export function findMode(id: string | undefined): GameMode {
   return GAME_MODES.find((m) => m.id === id) ?? BODY_MODE;
